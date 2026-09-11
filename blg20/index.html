@@ -684,15 +684,18 @@ async function writePosition(lat, lon, alt, unc, method, source) {
 	const buf = packPosition(lat, lon, alt, unc, method);
 	$('n-fix').innerHTML = '<div class="bytes">writing <b>' + hex(buf) + '</b></div><p class="note">' + lat.toFixed(7) + ', ' + lon.toFixed(7) + ' at ' + alt.toFixed(1) + ' m, <b>±' + unc + ' m</b>, method <b>' + METHOD_NAME[method] + '</b>' + (source ? ' — ' + source : '') + '.</p>';
 	try {
-		await gattOp(() => chars.pos.writeValue(buf), 'position');
+		await gattOp(() => (chars.pos.writeValueWithResponse ? chars.pos.writeValueWithResponse(buf) : chars.pos.writeValue(buf)), 'position');
 		written.pos = { lat, lon, alt, unc, method };
 		say('position written: ' + lat.toFixed(6) + ', ' + lon.toFixed(6) + ' ±' + unc + ' m (' + METHOD_NAME[method] + ')', 'good');
+		/* The write is not the proof; the read-back is. Step 2 is done only when the unit
+		 * reports the position back, byte for byte. A status read that fails, or that says
+		 * "no position", leaves the step open and says so - never silently on to step 3. */
 		const s = await readStatus(true);
-		if (s && s.hasPos) {
-			const dLat = Math.abs(s.lat - Math.round(lat * 1e7)), dLon = Math.abs(s.lon - Math.round(lon * 1e7));
-			if (dLat > 1 || dLon > 1 || s.unc !== clamp(Math.round(unc), 1, 65535) || s.method !== method) { say('read-back DIFFERS from what was written — the unit holds ' + fmt7(s.lat) + ', ' + fmt7(s.lon) + ' ±' + s.unc + ' m', 'bad'); return false; }
-			say('read back: matches', 'good');
-		}
+		if (!s) { say('written, but the unit could not be read back — not moving on. Reconnect and read status; if it shows no position, write it again.', 'bad'); $('n-fix').innerHTML += '<p class="note stop"><b>Not confirmed.</b> The status read after the write failed.</p>'; return false; }
+		if (!s.hasPos) { say('the unit accepted the write but reports NO position — it did not keep it. Check the firmware log (a position needs method and uncertainty, both non-zero) and write again.', 'bad'); $('n-fix').innerHTML += '<p class="note stop"><b>Not kept.</b> The unit reports no position after the write.</p>'; written.pos = null; return false; }
+		const dLat = Math.abs(s.lat - Math.round(lat * 1e7)), dLon = Math.abs(s.lon - Math.round(lon * 1e7));
+		if (dLat > 1 || dLon > 1 || s.unc !== clamp(Math.round(unc), 1, 65535) || s.method !== method) { say('read-back DIFFERS from what was written — the unit holds ' + fmt7(s.lat) + ', ' + fmt7(s.lon) + ' ±' + s.unc + ' m', 'bad'); written.pos = null; return false; }
+		say('read back: matches', 'good');
 		stepState('s2', 'did'); stepState('s3', 'on'); $('b-cred').disabled = false; fillNames();
 		return true;
 	} catch (e) { say('the unit refused the position: ' + explainWriteError(e), 'bad'); return false; }
