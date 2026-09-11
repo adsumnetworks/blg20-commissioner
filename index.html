@@ -350,6 +350,9 @@
 			<tr><td>solid blue, then green ×2</td><td>sending, then acknowledged</td></tr>
 			<tr><td>red ×3</td><td>a send failed; it will try next cycle</td></tr>
 			<tr><td>cyan where blue would be</td><td>on the satellite bearer</td></tr>
+			<tr><td>cyan, one flash every 3 s</td><td>satellite: waiting to attach — can take minutes</td></tr>
+			<tr><td>cyan / red alternating</td><td>satellite allowance used up; still working on cellular</td></tr>
+			<tr><td>amber ×2 then cyan</td><td>satellite refused: no commissioned position — set one</td></tr>
 			<tr><td><b>red, one flash every 2 s</b></td><td><b>data allowance exhausted — parked.</b> This needs a visit</td></tr>
 			<tr><td>red / amber alternating</td><td>the modem is under a network attach ban: <b>do not reset it</b>, it clears itself in ~30 min</td></tr>
 			<tr><td>solid red</td><td>fault</td></tr>
@@ -362,6 +365,7 @@
 			<tr><td>green flash + tick</td><td>a write was accepted</td></tr>
 			<tr><td>red ×2 + buzz</td><td>a write was refused — read status to see why</td></tr>
 			<tr><td>green ×3 + rising chirp</td><td><b>commissioned</b></td></tr>
+			<tr><td>three ticks, once</td><td><b>first data sent after commissioning — you can leave</b></td></tr>
 			<tr><td>amber flash every 5 s</td><td>store filling; the cellular half is behind</td></tr>
 			<tr><td>red flash every 2 s</td><td>the link between the two halves is down</td></tr>
 			</tbody>
