@@ -61,10 +61,12 @@
 	.top{position:sticky;top:0;z-index:20;background:var(--surface);border-bottom:1px solid var(--rule);padding:10px 14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
 	.wmcard{display:inline-block;background:#fff;border:1px solid var(--rule);border-radius:8px;padding:4px 8px;flex:none;line-height:0}
 	.wmcard img{height:34px;width:auto;display:block}
-	.qrcard{display:flex;gap:16px;align-items:center;background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:12px 14px;margin:14px 0}
+	.qrcard{display:flex;gap:16px;align-items:center;background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:12px 14px;margin:14px 0;min-width:0}
 	.qrcard img{width:132px;height:132px;flex:none;border-radius:6px;background:#fff;padding:4px}
-	.qrcard p{margin:0;font-size:14px;color:var(--muted)}
-	.qrcard code{font-size:12.5px}
+	.qrcard p{margin:0;font-size:14px;color:var(--muted);min-width:0;overflow-wrap:anywhere}
+	.qrcard code{font-size:12.5px;overflow-wrap:anywhere;word-break:break-all}
+	@media (max-width:560px){.qrcard{flex-direction:column;align-items:stretch;text-align:center}.qrcard img{margin:0 auto;width:160px;height:160px}}
+	@media (max-width:420px){.top{gap:8px}.wmcard img{height:28px}.top .unit{margin-left:0;width:100%}}
 	.top .brand{font-weight:700;letter-spacing:.02em}
 	.top .brand small{display:block;font-weight:500;color:var(--coral);font-size:11px;letter-spacing:.12em;text-transform:uppercase}
 	.top .unit{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13.5px}
