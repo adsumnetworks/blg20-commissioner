@@ -604,8 +604,11 @@ function renderStatus(s) {
 	$('r-state').innerHTML = (s.commissioned ? '<span class="pill go">commissioned</span>' : '<span class="pill warn">not commissioned</span>') + err;
 	$('r-state').className = '';
 	$('u-state').textContent = s.commissioned ? 'commissioned' : 'not commissioned'; $('u-state').className = 'pill ' + (s.commissioned ? 'go' : 'warn');
-	if (s.hasPos && s.hasCred && !s.commissioned) { $('b-commission').disabled = false; stepState('s4', 'on'); }
-	if (s.commissioned) { stepState('s4', 'did'); stepState('s5', 'on'); $('b-record').disabled = false; }
+	// A commissioned unit can be commissioned again: a re-sited unit gets a new position or key
+	// written in steps 2-3, and only the commission command carries the record to the cellular
+	// half. So the button stays armed whenever the unit holds both halves of the record.
+	if (s.hasPos && s.hasCred) { $('b-commission').disabled = false; $('b-commission').textContent = s.commissioned ? 'Re-commission (send the record to the cellular half again)' : 'Commission this unit'; stepState('s4', s.commissioned ? 'did' : 'on'); }
+	if (s.commissioned) { stepState('s5', 'on'); $('b-record').disabled = false; if (!$('n-commission').textContent) $('n-commission').innerHTML = '<p class="note">Already commissioned. Wrote a new position or key? Press re-commission so the cellular half gets it. Moving the unit to a new site? Factory reset (advanced panel) and start over.</p>'; }
 	lastStatus = s;
 }
 async function readStatus(quiet) {
