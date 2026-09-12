@@ -127,6 +127,16 @@
 	.readout dt{font:600 11px/1.9 var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--faint)}
 	.readout dd{margin:0;font-family:var(--mono);font-size:14px;overflow-wrap:anywhere}
 	.readout dd.dim{color:var(--faint);font-family:var(--sans)}
+	/* the M1 status panel: ten small definition lists, one per group */
+	.sgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:10px;margin-left:42px}
+	.sgrid .g{border:1px solid var(--rule-soft);border-radius:9px;background:var(--well);padding:8px 10px 10px}
+	.sgrid .g h3{font:700 11px/1.9 var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 4px;display:flex;gap:8px;align-items:center}
+	.sgrid .g h3 .gs{font:600 10.5px/1.6 var(--sans);letter-spacing:.02em;text-transform:none;color:var(--warn)}
+	.sgrid .readout{padding:0;background:none;border:0;border-radius:0;gap:3px 10px;font-size:13px}
+	.sgrid .readout dd{font-size:13px}
+	/* Stale is a colour AND a word: a greyed number nobody read the header of is still a number. */
+	#s-status.stale .g[data-mirror] .readout dd,#s-status.stale .readout dd.m{color:var(--faint)}
+	@media (max-width:520px){.sgrid{margin-left:0}}
 	.note{border-radius:9px;padding:10px 13px;font-size:14px;margin:0;border:1px solid var(--cyan-edge);background:var(--cyan-wash)}
 	.note.go{border-color:var(--go);background:var(--go-wash)} .note.warn{border-color:var(--warn);background:var(--warn-wash)} .note.stop{border-color:var(--stop);background:var(--stop-wash)}
 	.bytes{font-family:var(--mono);font-size:12.5px;padding:8px 10px;background:var(--well);border-radius:7px;overflow-wrap:anywhere;border:1px solid var(--rule-soft)}
@@ -237,6 +247,14 @@
 			<dt>State</dt><dd id="r-state" class="dim">—</dd>
 		</dl>
 	</div>
+</li>
+
+<!-- ── M1: the unit's own account of itself, as soon as it is paired ── -->
+<li class="step" id="s-status" hidden>
+	<h2 style="margin-left:0">Status</h2>
+	<p style="margin-left:0">Everything this unit knows about itself, including the cellular half's state mirrored across the inter-chip link. Refreshed every five seconds. The mirror carries its own age: if it stops arriving the mirrored groups grey out and say how old they are, because a number with no age is the one that gets believed.</p>
+	<div class="row" style="margin:0 0 8px 42px"><span id="sta2-age" class="pill dim">—</span><button class="btn sm ghost" id="b-sta2">Refresh now</button></div>
+	<div class="sgrid" id="sgrid"></div>
 </li>
 
 <li class="step" id="s2" aria-disabled="true">
@@ -428,6 +446,7 @@ const C = {                                    // proven on hardware, 10 Sep 202
 	dpl: 'a05c000b-9e5f-4b6a-9f3a-2d1c7e4b8a01',   // write: host_len host port u16 path_len path tok_len token
 	scn: 'a05c000c-9e5f-4b6a-9f3a-2d1c7e4b8a01',   // write 6 B: window_ms u32, rssi_min i8, pad
 	ui:  'a05c000d-9e5f-4b6a-9f3a-2d1c7e4b8a01',   // write 2 B: led_brightness_pct u8, buzzer_enabled u8 (PLAN-2026-09-12-leds-buttons)
+	sta2:'a05c000f-9e5f-4b6a-9f3a-2d1c7e4b8a01',   // read 117 B: struct status2 (M1) - this chip's counters plus the cellular half's mirror
 };
 const METHOD = { INSTALLER_PHONE: 1, MANUAL: 2, CELLULAR: 3, SURVEY_GNSS: 4 };
 const METHOD_NAME = { 0:'none', 1:'installer phone', 2:'manual', 3:'cellular', 4:'surveyed' };
@@ -437,7 +456,11 @@ const REFUSAL = {                              // mirrors enum prov_error in pro
 	3: 'the unit did not recognise the length of that write',
 	4: 'the position was rejected: it needs a method and a real uncertainty',
 };
-const CMD = { COMMISSION: 1, TEST_UPLINK: 2, REBOOT: 3, FACTORY_RESET: 4, IDENTIFY: 5 };   // 2–5 proposed
+/* enum link_cmd_id in each chip's src/link_proto.h — ONE table, shared by both chips and this tool.
+   1–5 are written as a single byte, as they always were; 6–10 carry three argument bytes after
+   the command. 6 and 7 are the two the BLE half forwards to the cellular half. */
+const CMD = { COMMISSION: 1, TEST_UPLINK: 2, REBOOT: 3, FACTORY_RESET: 4, IDENTIFY: 5,
+	FORCE_RUNG: 6, STATUS_NOW: 7, WINDOW: 8, CLEAR_LATCH: 9, REPUBLISH_TABLE: 10 };
 
 /* ───────────────────────── small utilities ───────────────────────── */
 const $ = id => document.getElementById(id);
@@ -620,6 +643,202 @@ async function readStatus(quiet) {
 	} catch (e) { say('could not read status: ' + explainWriteError(e), 'bad'); return null; }
 }
 
+
+/* ───────────────────────── M1: status2 (…000f) ─────────────────────────
+   The offsets ARE the contract. They are written out rather than derived, in exactly the order
+   the C structs declare them (struct status_mirror in each chip's src/link_proto.h, struct status2 in
+   src/bm20-ble/src/provision.c), so a field inserted on the firmware side and not here shows up
+   as a wrong number rather than as nothing at all. Both structs are __packed and little-endian,
+   both are versioned by a leading u8, and the mirror sits inside status2 at offset 3. */
+const M = {   // struct status_mirror, 52 B
+	VER: 0, BEARER_STATE: 1, RUNG: 2, FLAGS: 3, PLMN: 4, BAND: 8, RSRP: 9, SNR: 10, IMG: 11,
+	CELLID: 12, QUOTA_SPENT: 16, QUOTA_CAP: 20, SAT_SPENT: 24, SAT_CAP: 26, SAT_MONTH: 28,
+	LAST_ATTACH: 30, TRANSITIONS: 32, REASON: 33, UP_CODE: 34, RESET: 35, UP_AGE: 36,
+	UP_BYTES: 38, NEXT_WIN: 40, RESETS: 42, TEMP: 43, UPTIME: 44, FW: 48, SIZE: 52,
+};
+const S2 = {  // struct status2, 117 B
+	VER: 0, MIRROR_AGE: 1, MIRROR: 3,
+	DEVICES: 55, EXPECTED: 57, MISSING: 59, ADMITTED: 61, DROPPED: 65, QUARANTINED: 69,
+	SESS_OK: 73, SESS_PARTIAL: 75, SESS_REFUSED: 77, SESS_TIMEOUT: 79,
+	BONDS: 81, BONDS_MAX: 82, SCAN_DUTY: 83, LINK_ALIVE: 84,
+	STORE_RECS: 85, STORE_BYTES: 89, OLDEST_AGE: 93, OVERWRITTEN: 97, ERASE_CYCLES: 101,
+	ALERTS: 105, LATCHED: 106, DEFERRED: 107, HB_AGE: 109, UPTIME: 111, RESET: 115, RESETS: 116,
+	SIZE: 117,
+};
+/* Names, taken from the firmware and nowhere else: bearer_state_name() and bearer_rung_name() in
+   src/nrf9151-app/src/bearer.c, bearer_reason_name() beside them. */
+const BEARER_STATE = ['off', 'configuring', 'sim', 'attaching', 'registered', 'up', 'backoff', 'PARKED'];
+const RUNG = ['LTE-M', 'NB-IoT', 'satellite'];
+const REASON = ['—', 'ok', 'radio inhibited (bench build)', 'parked by the governor', 'backoff',
+	'rung not supported', 'no commissioned position', 'no SIM', 'the modem refused CFUN=1',
+	'never registered', 'registered, no PDN'];
+const IMG = ['running, confirmed', 'ON TEST — one reboot from a rollback', 'unknown'];
+/* Zephyr hwinfo.h. Bits 8 and up (CPU_LOCKUP, PARITY, PLL, CLOCK, HARDWARE, USER, TEMPERATURE)
+   do not survive the u8 the wire format carries — see FINDINGS-M1. */
+const RESET_BITS = ['PIN', 'SOFTWARE', 'BROWNOUT', 'POR', 'WATCHDOG', 'DEBUG', 'SECURITY', 'LP-WAKE'];
+const MFLAG = [['attach ban', 'stop'], ['parked', 'stop'], ['time synced', 'go'], ['rung pinned', 'warn'],
+	['profiles', 'go'], ['roaming', 'warn'], ['not preferred', 'warn'], ['radio inhibited', 'warn']];
+
+const NEVER = 0xFFFF;
+const n0 = v => v.toLocaleString('en-GB');
+function bits(v, names) { const o = []; for (let i = 0; i < names.length; i++) if (v & (1 << i)) o.push(names[i]); return o; }
+function coapCode(c) { return c === 0 ? 'never' : c === 0xFF ? 'sent, no reply' : ((c >> 5) & 7) + '.' + String(c & 0x1f).padStart(2, '0'); }
+function dur(sec) {
+	if (sec === NEVER) return 'never';
+	if (sec < 90) return sec + ' s';
+	if (sec < 5400) return Math.round(sec / 60) + ' min';
+	return (sec / 3600).toFixed(1) + ' h';
+}
+function plmnStr(v) { return v ? Math.floor(v / 1000) + ' ' + String(v % 1000).padStart(2, '0') : 'unknown'; }
+function monthStr(v) { return v ? Math.floor(v / 12) + '-' + String((v % 12) + 1).padStart(2, '0') : 'no clock yet'; }
+function pct(a, b) { return b ? Math.round(a * 100 / b) + ' %' : '—'; }
+
+function parseStatus2(dv) {
+	if (dv.byteLength < S2.SIZE) throw new Error('status2 is ' + dv.byteLength + ' bytes; this firmware speaks a different layout (expected ' + S2.SIZE + ')');
+	const g8 = o => dv.getUint8(o), gi8 = o => dv.getInt8(o), g16 = o => dv.getUint16(o, true), g32 = o => dv.getUint32(o, true);
+	const b = S2.MIRROR;
+	return {
+		ver: g8(S2.VER), age: g16(S2.MIRROR_AGE),
+		m: {
+			ver: g8(b + M.VER), state: g8(b + M.BEARER_STATE), rung: g8(b + M.RUNG), flags: g8(b + M.FLAGS),
+			plmn: g32(b + M.PLMN), band: g8(b + M.BAND), rsrp: gi8(b + M.RSRP), snr: gi8(b + M.SNR),
+			img: g8(b + M.IMG), cellid: g32(b + M.CELLID), spent: g32(b + M.QUOTA_SPENT), cap: g32(b + M.QUOTA_CAP),
+			satSpent: g16(b + M.SAT_SPENT), satCap: g16(b + M.SAT_CAP), satMonth: g16(b + M.SAT_MONTH),
+			attachS: g16(b + M.LAST_ATTACH), transitions: g8(b + M.TRANSITIONS), reason: g8(b + M.REASON),
+			upCode: g8(b + M.UP_CODE), reset: g8(b + M.RESET), upAge: g16(b + M.UP_AGE), upBytes: g16(b + M.UP_BYTES),
+			nextWin: g16(b + M.NEXT_WIN), resets: g8(b + M.RESETS), temp: gi8(b + M.TEMP),
+			uptime: g32(b + M.UPTIME), fw: g32(b + M.FW),
+		},
+		devices: g16(S2.DEVICES), expected: g16(S2.EXPECTED), missing: g16(S2.MISSING),
+		admitted: g32(S2.ADMITTED), dropped: g32(S2.DROPPED), quarantined: g32(S2.QUARANTINED),
+		sessOk: g16(S2.SESS_OK), sessPartial: g16(S2.SESS_PARTIAL), sessRefused: g16(S2.SESS_REFUSED), sessTimeout: g16(S2.SESS_TIMEOUT),
+		bonds: g8(S2.BONDS), bondsMax: g8(S2.BONDS_MAX), scanDuty: g8(S2.SCAN_DUTY), linkAlive: g8(S2.LINK_ALIVE),
+		storeRecs: g32(S2.STORE_RECS), storeBytes: g32(S2.STORE_BYTES), oldestAge: g32(S2.OLDEST_AGE),
+		overwritten: g32(S2.OVERWRITTEN), eraseCycles: g32(S2.ERASE_CYCLES),
+		alerts: g8(S2.ALERTS), latched: g8(S2.LATCHED), deferred: g16(S2.DEFERRED),
+		hbAge: g16(S2.HB_AGE), uptime: g32(S2.UPTIME), reset: g8(S2.RESET), resets: g8(S2.RESETS),
+	};
+}
+
+/* The ten groups. `mirror: true` marks a group that is entirely the other chip's word for it, so
+   one rule greys all of them when the mirror goes stale; `m` on a single row does the same for a
+   mirrored row inside a group that is mostly ours. */
+const STATUS_GROUPS = [
+	{ id: 'ident', name: 'Identity', rows: [['unit', 'Unit'], ['fwble', 'BLE half'], ['fw91', 'Cellular half', 1], ['img', 'Image', 1]] },
+	{ id: 'comm', name: 'Commissioning', rows: [['cstate', 'State'], ['cpos', 'Position'], ['ccred', 'Credential'], ['cbonds', 'Bonds'], ['cerr', 'Last refusal']] },
+	{ id: 'net', name: 'Network', mirror: true, rows: [['bstate', 'Bearer'], ['brung', 'Rung'], ['bplmn', 'Network'], ['bcell', 'Band / cell'], ['bsig', 'Signal'], ['breason', 'Last reason'], ['battach', 'Last attach'], ['bflags', 'Flags']] },
+	{ id: 'quota', name: 'Quota', mirror: true, rows: [['qspent', 'Spent'], ['qsat', 'Satellite'], ['qmonth', 'Sat. month'], ['qparked', 'Governor']] },
+	{ id: 'uplink', name: 'Uplink', mirror: true, rows: [['ucode', 'Last result'], ['uage', 'When'], ['ubytes', 'Datagram'], ['unext', 'Next cycle']] },
+	{ id: 'cap', name: 'Capture', rows: [['pdev', 'Devices in window'], ['pexp', 'Expected'], ['pmiss', 'Missing'], ['padm', 'Admitted'], ['pdrop', 'Dropped'], ['pquar', 'Quarantined']] },
+	{ id: 'store', name: 'Store', rows: [['srec', 'Records held'], ['sbytes', 'Bytes'], ['soldest', 'Oldest'], ['sover', 'Overwritten'], ['serase', 'Erase cycles']] },
+	{ id: 'alerts', name: 'Alerts', rows: [['aact', 'Active'], ['alat', 'Latched'], ['adef', 'Deferred']] },
+	{ id: 'health', name: 'Health', rows: [['hlink', 'Inter-chip link'], ['hhb', 'Last heartbeat'], ['hmir', 'Mirror age'], ['hup', 'BLE uptime'], ['hup91', 'Cellular uptime', 1], ['hreset', 'BLE reset cause'], ['hreset91', 'Cellular reset cause', 1], ['hduty', 'Scan duty'], ['htemp', 'Modem temp', 1]] },
+	{ id: 'ctl', name: 'Controls', mirror: true, rows: [['xradio', 'Radio'], ['xpin', 'Rung pin'], ['xprof', 'Cellular profiles'], ['xtime', 'Clock'], ['xtrans', 'Bearer changes']] },
+];
+function buildStatusPanel() {
+	const grid = $('sgrid');
+	if (!grid || grid.children.length) return;
+	for (const g of STATUS_GROUPS) {
+		const div = document.createElement('div');
+		div.className = 'g'; div.id = 'g-' + g.id; if (g.mirror) div.dataset.mirror = '1';
+		div.innerHTML = '<h3>' + g.name + '<span class="gs"></span></h3><dl class="readout">' +
+			g.rows.map(r => '<dt>' + r[1] + '</dt><dd id="v-' + r[0] + '"' + (r[2] ? ' class="m"' : '') + '>—</dd>').join('') + '</dl>';
+		grid.appendChild(div);
+	}
+}
+const setv = (k, v) => { const el = $('v-' + k); if (el) el.textContent = v; };
+
+let sta2Timer = null, lastSta2 = null;
+function renderStatus2(s) {
+	const m = s.m, stale = s.age !== NEVER && s.age > 10, never = s.age === NEVER;
+	const f = n => (m.flags & n) !== 0;
+
+	$('s-status').classList.toggle('stale', stale || never);
+	const chip = $('sta2-age');
+	chip.textContent = never ? 'no mirror yet' : stale ? 'stale · ' + s.age + 's' : 'mirror ' + s.age + 's old';
+	chip.className = 'pill ' + (never ? 'stop' : stale ? 'warn' : 'go');
+	for (const g of STATUS_GROUPS) {
+		if (!g.mirror) continue;
+		$('g-' + g.id).querySelector('.gs').textContent = never ? 'no mirror yet' : stale ? 'stale · ' + s.age + 's' : '';
+	}
+
+	setv('unit', (dev && (dev.name || dev.id)) || '—');
+	setv('fwble', lastStatus ? fwStr(lastStatus.fw) : '—');
+	setv('fw91', fwStr(m.fw));
+	setv('img', IMG[m.img] || ('img ' + m.img));
+
+	setv('cstate', lastStatus ? (lastStatus.commissioned ? 'commissioned' : 'not commissioned') : '—');
+	setv('cpos', lastStatus && lastStatus.hasPos ? fmt7(lastStatus.lat) + ', ' + fmt7(lastStatus.lon) + ' ±' + lastStatus.unc + ' m' : 'none');
+	setv('ccred', lastStatus && lastStatus.hasCred ? 'held' : 'none');
+	setv('cbonds', s.bonds + ' of ' + s.bondsMax);
+	setv('cerr', lastStatus && lastStatus.lastError ? (REFUSAL[lastStatus.lastError] || lastStatus.lastError) : 'none');
+
+	setv('bstate', BEARER_STATE[m.state] || ('state ' + m.state));
+	setv('brung', RUNG[m.rung] || ('rung ' + m.rung));
+	setv('bplmn', plmnStr(m.plmn));
+	setv('bcell', (m.band ? 'band ' + m.band : 'band ?') + ' · cell ' + (m.cellid ? m.cellid.toString(16).toUpperCase() : '?'));
+	setv('bsig', m.rsrp ? m.rsrp + ' dBm · SNR ' + m.snr + ' dB' : 'not registered');
+	setv('breason', REASON[m.reason] || ('reason ' + m.reason));
+	setv('battach', m.attachS ? m.attachS + ' s' : 'never');
+	setv('bflags', bits(m.flags, MFLAG.map(x => x[0])).join(', ') || 'none');
+
+	setv('qspent', n0(m.spent) + ' of ' + n0(m.cap) + ' B (' + pct(m.spent, m.cap) + ')');
+	setv('qsat', n0(m.satSpent) + ' of ' + n0(m.satCap) + ' B (' + pct(m.satSpent, m.satCap) + ')');
+	setv('qmonth', monthStr(m.satMonth));
+	setv('qparked', f(0x02) ? 'PARKED — no automatic exit' : 'running');
+
+	setv('ucode', coapCode(m.upCode));
+	setv('uage', dur(m.upAge));
+	setv('ubytes', m.upBytes ? n0(m.upBytes) + ' B' : '—');
+	setv('unext', m.nextWin ? 'in ' + dur(m.nextWin) : 'not sleeping');
+
+	setv('pdev', n0(s.devices)); setv('pexp', s.expected ? n0(s.expected) : 'no roster yet');
+	setv('pmiss', s.expected ? n0(s.missing) : '—'); setv('padm', n0(s.admitted));
+	setv('pdrop', n0(s.dropped)); setv('pquar', n0(s.quarantined));
+
+	setv('srec', n0(s.storeRecs)); setv('sbytes', n0(s.storeBytes) + ' B');
+	setv('soldest', s.oldestAge ? dur(s.oldestAge) : '—');
+	setv('sover', n0(s.overwritten)); setv('serase', n0(s.eraseCycles));
+
+	setv('aact', n0(s.alerts)); setv('alat', n0(s.latched)); setv('adef', n0(s.deferred));
+
+	setv('hlink', s.linkAlive ? 'up' : 'DOWN');
+	setv('hhb', dur(s.hbAge));
+	setv('hmir', never ? 'never' : s.age + ' s');
+	setv('hup', dur(s.uptime)); setv('hup91', dur(m.uptime));
+	setv('hreset', s.reset ? bits(s.reset, RESET_BITS).join(' ') || ('0x' + s.reset.toString(16)) : 'none recorded');
+	setv('hreset91', m.reset ? bits(m.reset, RESET_BITS).join(' ') || ('0x' + m.reset.toString(16)) : 'none recorded');
+	setv('hduty', s.scanDuty ? s.scanDuty + ' %' : 'not measured');
+	setv('htemp', m.temp ? m.temp + ' °C' : 'not read');
+
+	setv('xradio', f(0x80) ? 'INHIBITED (bench build)' : 'enabled');
+	setv('xpin', f(0x08) ? 'pinned to ' + (RUNG[m.rung] || m.rung) : 'ladder walks');
+	setv('xprof', f(0x10) ? 'accepted' : 'none (one context, id 0)');
+	setv('xtime', f(0x04) ? 'network time given to this chip' : 'uptime only');
+	setv('xtrans', n0(m.transitions) + ' since boot');
+
+	lastSta2 = s;
+}
+async function readStatus2() {
+	if (!chars.sta2) return null;
+	try {
+		const dv = await gattOp(() => chars.sta2.readValue(), 'status2');
+		const s = parseStatus2(dv); renderStatus2(s); return s;
+	} catch (e) { say('could not read the status panel: ' + explainWriteError(e), 'warn'); return null; }
+}
+function startStatusPoll() {
+	stopStatusPoll();
+	if (!chars.sta2) { $('s-status').hidden = true; return; }
+	buildStatusPanel();
+	$('s-status').hidden = false;
+	readStatus2();
+	/* Five seconds. Fast enough that an installer watching an attach sees it move, slow enough
+	   that the read never competes with a write in the middle of commissioning. */
+	sta2Timer = setInterval(readStatus2, 5000);
+}
+function stopStatusPoll() { if (sta2Timer) { clearInterval(sta2Timer); sta2Timer = null; } }
+$('b-sta2').onclick = e => { e.stopPropagation(); readStatus2(); };
+
 /* ───────────────────────── connect ───────────────────────── */
 $('b-connect').onclick = async () => {
 	if (!preflight()) { say('pre-flight is blocking — see the checks above', 'bad'); $('p-pre').classList.add('open'); return; }
@@ -629,6 +848,7 @@ $('b-connect').onclick = async () => {
 		dev.addEventListener('gattserverdisconnected', () => {
 			say('the unit disconnected', 'bad'); $('u-name').textContent = 'disconnected'; $('u-pk').hidden = true; $('u-name').className = 'pill stop'; $('b-disconnect').disabled = true; $('b-connect').textContent = 'Reconnect';
 			if (wake) { try { wake.release(); } catch (_) {} wake = null; }
+			stopStatusPoll();
 		});
 		gatt = await dev.gatt.connect();
 		const svc = await gatt.getPrimaryService(SVC);
@@ -658,6 +878,9 @@ $('b-connect').onclick = async () => {
 		// Reading status is also what triggers pairing: every attribute needs an authenticated link,
 		// and it is better to meet the passkey prompt now than mid-commission.
 		await readStatus(false);
+		/* Only on firmware that has it. On anything older the panel stays hidden rather than
+		 * showing a grid of dashes, which reads as a broken unit rather than an old one. */
+		startStatusPoll();
 	} catch (e) {
 		if (e.name === 'NotFoundError') { say('no unit chosen'); return; }
 		if (e.name === 'SecurityError') { $('n-connect').innerHTML = '<p class="note stop"><b>Bluetooth is blocked here.</b> Open the page in its own tab.</p>'; return; }
@@ -843,17 +1066,48 @@ const PARAMS = [
 	{ id: 'testup', cap: 'cmd2', name: 'Test uplink now', kind: 'action', note: 'command 2 — one record, so the installer sees a 2.01 before leaving' },
 	{ id: 'freset', cap: 'cmd2', name: 'Factory reset', kind: 'action', danger: true, note: 'command 4 — wipes position, credential and label, keeps the byte odometer; the unit reboots' },
 	{ id: 'reboot', cap: 'cmd2', name: 'Reboot the BLE half', kind: 'action', note: 'command 3 — a warm restart of the BM20 only; the cellular half and its attach are untouched' },
+	/* M1 (…000f firmware). Two of these are acted on by the CELLULAR half, which is why they
+	   only appear once the status characteristic proves this build carries the mirror. */
+	{ id: 'forcerung', cap: 'cmd3', name: 'Pin the bearer rung', kind: 'cmdsel', def: 'clear the pin', opts: ['clear the pin', 'LTE-M', 'NB-IoT', 'satellite'], danger: true, note: 'command 6 — forwarded to the cellular half. A pin on satellite empties a monthly allowance overnight: clear it before you leave' },
+	{ id: 'statusnow', cap: 'cmd3', name: 'Run a cycle now', kind: 'action', note: 'command 7 — forwarded: the cellular half stops sleeping and attempts an uplink now, so the installer sees a result instead of waiting 15 minutes' },
+	{ id: 'window', cap: 'cmd3', name: 'Commissioning window', kind: 'cmdsel', def: 'open', opts: ['open', 'close'], note: 'command 8 — the BLE half\'s own: advertise connectable, or stop' },
+	{ id: 'clearlatch', cap: 'cmd3', name: 'Clear a latched alert', kind: 'cmdnums', args: [['latchdev', 'device', 0, 65535], ['latchrule', 'rule', 0, 255]], note: 'command 9 — accepted by this firmware and not acted on until M4' },
+	{ id: 'republish', cap: 'cmd3', name: 'Republish the device table', kind: 'action', note: 'command 10 — accepted by this firmware and not acted on until M4' },
 ];
-const CMD_OF = { identify: CMD.IDENTIFY, testup: CMD.TEST_UPLINK, freset: CMD.FACTORY_RESET, reboot: CMD.REBOOT };
-// Firmware that has the ui characteristic (12 Sep 2026) answers commands 3, 4 and 5; 2 is still a proposal.
-const cmdLive = id => !!caps.ui && id !== 'testup';
+const CMD_OF = { identify: CMD.IDENTIFY, testup: CMD.TEST_UPLINK, freset: CMD.FACTORY_RESET, reboot: CMD.REBOOT,
+	forcerung: CMD.FORCE_RUNG, statusnow: CMD.STATUS_NOW, window: CMD.WINDOW, clearlatch: CMD.CLEAR_LATCH, republish: CMD.REPUBLISH_TABLE };
+// Firmware that has the ui characteristic (12 Sep 2026) answers commands 3, 4 and 5; 2 is still a
+// proposal. 6–10 arrived with the status mirror, so the mirror characteristic is what proves them.
+const cmdLive = id => CMD_OF[id] >= CMD.FORCE_RUNG ? !!caps.sta2 : (!!caps.ui && id !== 'testup');
+/* Byte 0 is the command, bytes 1..3 its arguments — write_commission() in provision.c. The old
+   commands stay a single byte, so a unit that predates M1 sees exactly what it always saw. */
+const RUNG_ARG = { 'clear the pin': 0xFF, 'LTE-M': 0, 'NB-IoT': 1, 'satellite': 2 };
+const CMD_ARGS = {
+	forcerung: () => [RUNG_ARG[paramValues().forcerung ?? 'clear the pin'] ?? 0xFF, 0, 0],
+	statusnow: () => [0, 0, 0],
+	window: () => [(paramValues().window ?? 'open') === 'open' ? 1 : 0, 0, 0],
+	clearlatch: () => { const d = Number(paramValues().latchdev ?? 0) & 0xffff; return [d & 0xff, d >> 8, Number(paramValues().latchrule ?? 0) & 0xff]; },
+	republish: () => [0, 0, 0],
+};
 async function sendCommand(id) {
 	const code = CMD_OF[id];
 	if (id === 'freset' && !confirm('Factory reset this unit? Position, credential and label are wiped and it reboots. The byte odometer is kept.')) { say('factory reset cancelled'); return; }
+	if (id === 'forcerung' && (paramValues().forcerung ?? 'clear the pin') === 'satellite' && !confirm('Pin this unit to the satellite rung? The satellite allowance is measured in kilobytes a month and a unit left pinned will spend it. Clear the pin before you leave site.')) { say('rung pin cancelled'); return; }
+	const args = CMD_ARGS[id] ? CMD_ARGS[id]() : null;
+	const payload = args ? new Uint8Array([code, args[0], args[1], args[2]]) : new Uint8Array([code]);
 	try {
-		await gattOp(() => chars.cmd.writeValue(new Uint8Array([code])), id);
-		say({ identify: 'identify sent — both LEDs white ×3, two ticks', freset: 'factory reset sent — the unit is wiping and rebooting; reconnect in a few seconds', reboot: 'reboot sent — reconnect in a few seconds' }[id] || (id + ' sent'), id === 'freset' ? 'warn' : 'good');
+		await gattOp(() => chars.cmd.writeValue(payload), id);
+		say({ identify: 'identify sent — both LEDs white ×3, two ticks',
+			freset: 'factory reset sent — the unit is wiping and rebooting; reconnect in a few seconds',
+			reboot: 'reboot sent — reconnect in a few seconds',
+			forcerung: 'rung pin sent: ' + (paramValues().forcerung ?? 'clear the pin') + ' — forwarded to the cellular half',
+			statusnow: 'cycle requested — the cellular half stops sleeping; watch the Uplink group',
+			window: 'commissioning window ' + (paramValues().window ?? 'open'),
+			clearlatch: 'clear-latch sent — this firmware accepts it and does nothing until M4',
+			republish: 'republish sent — this firmware accepts it and does nothing until M4' }[id] || (id + ' sent'),
+			(id === 'freset' || id === 'forcerung') ? 'warn' : 'good');
 		if (id === 'freset') { written.pos = null; written.label = null; written.ident = null; written.psk = null; }
+		if (chars.sta2 && id !== 'freset' && id !== 'reboot') setTimeout(readStatus2, 300);
 	} catch (e) { say(id + ': ' + explainWriteError(e), 'bad'); }
 }
 function paramValues() { const p = profile(); p.params = p.params || {}; return p.params; }
@@ -861,7 +1115,8 @@ function renderParams() {
 	const tb = $('params').querySelector('tbody'); tb.innerHTML = ''; const vals = paramValues();
 	let live = 0;
 	for (const q of PARAMS) {
-		const supported = q.cap === 'cmd2' ? cmdLive(q.id) : !!caps[q.cap];
+		const isCmd = q.cap === 'cmd2' || q.cap === 'cmd3';
+		const supported = isCmd ? cmdLive(q.id) : !!caps[q.cap];
 		if (supported) live++;
 		const tr = document.createElement('tr'); tr.dataset.supported = supported;
 		let ctl = '';
@@ -871,7 +1126,9 @@ function renderParams() {
 		else if (q.kind === 'number') ctl = '<input type="number" data-p="' + q.id + '" value="' + (vals[q.id] ?? q.def) + '" min="' + q.min + '" max="' + q.max + '"' + (supported ? '' : ' disabled') + '>';
 		else if (q.kind === 'select') ctl = '<select data-p="' + q.id + '"' + (supported ? '' : ' disabled') + '>' + q.opts.map(o => '<option' + ((vals[q.id] ?? q.def) === o ? ' selected' : '') + '>' + o + '</option>').join('') + '</select>';
 		else if (q.kind === 'action') ctl = '<button class="btn sm ' + (q.danger ? 'danger' : 'quiet') + '" data-cmd="' + q.id + '"' + (supported ? '' : ' disabled') + '>' + q.name + '</button>';
-		tr.innerHTML = '<td><b>' + q.name + '</b><br><small style="color:var(--muted)">' + q.note + '</small></td><td>' + ctl + '</td><td>' + (supported ? '<span class="pill go">live</span>' : '<span class="pill dim">' + (dev ? 'not in this firmware — needs characteristic <code>…' + (q.cap === 'cmd2' ? '0005 cmd ' + CMD_OF[q.id] : C[q.cap].slice(4, 8)) + '</code>' : 'connect to find out') + '</span>') + '</td>';
+		else if (q.kind === 'cmdsel') ctl = '<select data-p="' + q.id + '"' + (supported ? '' : ' disabled') + '>' + q.opts.map(o => '<option' + ((vals[q.id] ?? q.def) === o ? ' selected' : '') + '>' + o + '</option>').join('') + '</select> <button class="btn sm ' + (q.danger ? 'danger' : 'quiet') + '" data-cmd="' + q.id + '"' + (supported ? '' : ' disabled') + '>Send</button>';
+		else if (q.kind === 'cmdnums') ctl = q.args.map(a => '<input type="number" data-p="' + a[0] + '" aria-label="' + a[1] + '" placeholder="' + a[1] + '" value="' + (vals[a[0]] ?? 0) + '" min="' + a[2] + '" max="' + a[3] + '" style="width:6em"' + (supported ? '' : ' disabled') + '>').join(' ') + ' <button class="btn sm quiet" data-cmd="' + q.id + '"' + (supported ? '' : ' disabled') + '>Send</button>';
+		tr.innerHTML = '<td><b>' + q.name + '</b><br><small style="color:var(--muted)">' + q.note + '</small></td><td>' + ctl + '</td><td>' + (supported ? '<span class="pill go">live</span>' : '<span class="pill dim">' + (dev ? 'not in this firmware — needs characteristic <code>…' + (isCmd ? '0005 cmd ' + CMD_OF[q.id] : C[q.cap].slice(4, 8)) + '</code>' : 'connect to find out') + '</span>') + '</td>';
 		tb.appendChild(tr);
 	}
 	tb.querySelectorAll('[data-cmd]').forEach(b => b.onclick = () => sendCommand(b.dataset.cmd));
@@ -905,7 +1162,9 @@ $('b-advspec').onclick = e => {
 		'dpl ' + C.dpl + '  write     host_len u8, host[], port u16, path_len u8, path[], tok_len u8, token[]',
 		'scn ' + C.scn + '  write 6 B  window_ms u32, rssi_min i8, pad u8',
 		'ui  ' + C.ui + '  write 2 B  led_brightness_pct u8 (5-100), buzzer_enabled u8 (0/1)',
-		'cmd ' + C.cmd + '  write 1 B  1 commission (shipped), 2 test uplink, 3 reboot, 4 factory reset (requires a second write of 0xA5 within 5 s), 5 identify (both LEDs white x3, two buzzer ticks)', '',
+		'cmd ' + C.cmd + '  write 1 B  1 commission (shipped), 2 test uplink, 3 reboot, 4 factory reset (requires a second write of 0xA5 within 5 s), 5 identify (both LEDs white x3, two buzzer ticks)',
+		'cmd ' + C.cmd + '  write 4 B  byte 0 command, bytes 1-3 args (M1): 6 force_rung(rung, 0xFF clears) and 7 status_now are forwarded to the cellular half as FRAME_CMD 0x18; 8 window(0 close / 1 open); 9 clear_latch(device u16, rule u8) and 10 republish_table are accepted and not acted on until M4',
+		'sta2 ' + C.sta2 + '  read 117 B  struct status2 (M1): ver u8, mirror_age_s u16 (0xFFFF never), struct status_mirror (52 B, FRAME_STATUS_MIRROR 0x17), then this chip\'s counters. Offsets in the tool\'s S2/M tables.', '',
 		'All writes need an authenticated link (BT_GATT_PERM_WRITE_AUTHEN) and the peripheral must call bt_conn_set_security(conn, BT_SECURITY_L4) on connect — Web Bluetooth cannot initiate pairing.',
 		'Every parameter is readable back through sta (extend status_wire) so the tool can compare what it wrote with what the unit holds.', '',
 		'Generated by the commissioner tool, ' + iso()].join('\n');
