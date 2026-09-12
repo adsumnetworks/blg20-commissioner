@@ -586,6 +586,17 @@ function parseStatus(dv) {
 let dev = null, gatt = null, chars = {}, caps = {}, lastStatus = null, wake = null;
 const written = { pos: null, label: null, ident: null, psk: null };
 let gattBusy = Promise.resolve();
+/* Chrome (macOS in particular) re-discovers the GATT database once pairing completes and
+   invalidates every service and characteristic object it handed out before: from then on each
+   read says "GATT Service no longer exists" although the link is up and secured. Measured 12 Sep.
+   So the handles are re-discovered on that error and the operation retried once. */
+async function rediscover() {
+	const svc = await gatt.getPrimaryService(SVC);
+	const found = await svc.getCharacteristics();
+	const byUuid = Object.fromEntries(found.map(c => [c.uuid, c]));
+	for (const [k, uuid] of Object.entries(C)) { if (byUuid[uuid]) { chars[k] = byUuid[uuid]; caps[k] = true; } }
+	say('re-discovered the service after pairing (' + found.length + ' characteristics)');
+}
 function gattOp(fn, what) {
 	const run = async () => {
 		for (let attempt = 1; attempt <= 3; attempt++) {
@@ -593,6 +604,7 @@ function gattOp(fn, what) {
 			catch (e) {
 				const m = (e && e.message) || String(e);
 				if (attempt < 3 && /in progress|busy|already/i.test(m)) { await new Promise(r => setTimeout(r, 250 * attempt)); continue; }
+				if (attempt < 3 && /no longer exists|not found|invalid.*handle/i.test(m) && gatt && gatt.connected) { await rediscover(); continue; }
 				throw e;
 			}
 		}
