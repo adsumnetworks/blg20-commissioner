@@ -327,6 +327,74 @@
 
 </ol>
 
+<!-- ── M2: network policy (…0008 net) ── -->
+<section class="panel" id="p-net" hidden>
+	<div class="hd" role="button" tabindex="0" aria-expanded="false"><span class="tw">▸</span><h2>Network policy</h2><span class="st" id="net-st">—</span></div>
+	<div class="bd">
+		<p style="margin:8px 0 10px;color:var(--muted);font-size:13.5px">What this site is allowed to use, and in what order. Everything here <em>narrows</em> what the SIM and the modem can do; nothing here can widen it. The unit validates the whole configuration and refuses with a reason — this page does not second-guess it, because the unit is the one that has to live with the answer.</p>
+		<div class="row">
+			<div class="field"><label>Allowed accesses</label>
+				<div class="seg" role="group" aria-label="Allowed accesses">
+					<button id="n-a0" aria-pressed="true">LTE-M</button>
+					<button id="n-a1" aria-pressed="true">NB-IoT</button>
+					<button id="n-a2" aria-pressed="true">satellite</button>
+				</div>
+				<span class="hint">must sit inside the deployment class</span>
+			</div>
+		</div>
+		<div class="row" style="margin-top:10px">
+			<div class="field"><label for="n-ord0">Ladder, 1st</label><select id="n-ord0"></select></div>
+			<div class="field"><label for="n-ord1">2nd</label><select id="n-ord1"></select></div>
+			<div class="field"><label for="n-ord2">3rd</label><select id="n-ord2"></select></div>
+		</div>
+		<div class="row" style="margin-top:10px">
+			<div class="field"><label for="n-pmode">PLMN mode</label><select id="n-pmode"><option value="0">automatic</option><option value="1">prefer, in order</option><option value="2">lock to one</option></select></div>
+			<div class="field"><label for="n-roam">Roaming</label><select id="n-roam"><option value="1">allowed</option><option value="0">refused (home MCC only)</option></select></div>
+			<div class="field"><label for="n-climb">Climb-back, s</label><input type="number" id="n-climb" class="mono" min="0" max="65535" value="0"><span class="hint">0 = the firmware's own interval</span></div>
+		</div>
+		<div class="row" style="margin-top:10px">
+			<div class="field"><label for="n-pref0">Preferred PLMN 1</label><input type="text" id="n-pref0" class="mono" placeholder="23410" inputmode="numeric"></div>
+			<div class="field"><label for="n-pref1">2</label><input type="text" id="n-pref1" class="mono" inputmode="numeric"></div>
+			<div class="field"><label for="n-pref2">3</label><input type="text" id="n-pref2" class="mono" inputmode="numeric"></div>
+			<div class="field"><label for="n-pref3">4</label><input type="text" id="n-pref3" class="mono" inputmode="numeric"></div>
+		</div>
+		<div class="row" style="margin-top:10px">
+			<div class="field"><label for="n-lock">Locked PLMN</label><input type="text" id="n-lock" class="mono" placeholder="90198" inputmode="numeric"><span class="hint">MCC then MNC, e.g. 23410; reports plmn_absent rather than wandering</span></div>
+		</div>
+		<div class="row" style="margin-top:10px">
+			<div class="field"><label for="n-b0">Bands, LTE-M</label><input type="text" id="n-b0" class="mono" placeholder="20, 8"><span class="hint">1–88, up to four, blank = no lock</span></div>
+			<div class="field"><label for="n-b1">NB-IoT</label><input type="text" id="n-b1" class="mono" placeholder="20"></div>
+			<div class="field"><label for="n-b2">satellite</label><input type="text" id="n-b2" class="mono" placeholder="255, 256"><span class="hint">23, 249, 252, 255 or 256</span></div>
+		</div>
+		<div class="row" style="margin-top:12px"><button class="btn" id="b-netwrite">Write and read back</button><button class="btn quiet" id="b-netread">Read from the unit</button></div>
+		<div id="n-netnote"></div>
+	</div>
+</section>
+
+<!-- ── M2: deployment class (…000b dpl) ── -->
+<section class="panel" id="p-dpl" hidden>
+	<div class="hd" role="button" tabindex="0" aria-expanded="false"><span class="tw">▸</span><h2>Deployment class</h2><span class="st" id="dpl-st">—</span></div>
+	<div class="bd">
+		<p style="margin:8px 0 10px;color:var(--muted);font-size:13.5px">The class fixes the transport and the encoding for the life of the record store, because a record written under one bearer has to be sendable, unchanged, under any bearer the unit may fall to. MQTT and JSON are a terrestrial-only privilege: ask for either on a class that includes satellite and the unit refuses, here, at the desk.</p>
+		<div class="row">
+			<div class="field"><label for="d-class">Class</label><select id="d-class"><option value="0">TN — terrestrial only</option><option value="1">NTN — satellite only</option><option value="2">TN+NTN — the ladder</option></select></div>
+			<div class="field"><label for="d-transport">Transport</label><select id="d-transport"><option value="0">CoAP / DTLS-CID</option><option value="1">MQTT / TLS</option></select></div>
+			<div class="field"><label for="d-encoding">Encoding</label><select id="d-encoding"><option value="0">JSON</option><option value="1">CBOR</option><option value="2">protobuf</option></select></div>
+		</div>
+		<div class="row" style="margin-top:10px">
+			<div class="field"><label for="d-endpoint">Endpoint host</label><input type="text" id="d-endpoint" class="mono" maxlength="47" placeholder="coap.thingsboard.cloud" autocomplete="off" spellcheck="false"><span class="hint">a hostname: letters, digits, hyphen and dot</span></div>
+			<div class="field"><label for="d-port">Port</label><input type="number" id="d-port" class="mono" min="1" max="65535" value="5683"><span class="hint">5683 plain, 5684 DTLS</span></div>
+		</div>
+		<div class="row" style="margin-top:10px">
+			<div class="field"><label for="d-apn">APN</label><input type="text" id="d-apn" class="mono" maxlength="31" autocomplete="off" spellcheck="false"><span class="hint">blank = the SIM's own default, which is what most cards want; a managed IoT APN may not resolve DNS</span></div>
+			<div class="field"><label for="d-token">Device token</label><input type="password" id="d-token" class="mono" maxlength="23" autocomplete="off" spellcheck="false"><span class="hint">8–23 letters and digits. <b>Blank keeps the token the unit holds</b> — a token is replaced by a new one or removed by a factory reset, never cleared by omission.</span></div>
+		</div>
+		<p class="note warn" style="margin-top:8px"><b>The unit never reads a token back.</b> It is this unit's data-plane credential, so the read returns that field zeroed and the read-back check skips it. Leave the box blank on any later edit and the unit keeps the token it holds.</p>
+		<div class="row" style="margin-top:12px"><button class="btn" id="b-dplwrite">Write and read back</button><button class="btn quiet" id="b-dplread">Read from the unit</button></div>
+		<div id="n-dplnote"></div>
+	</div>
+</section>
+
 <!-- ── advanced parameters ── -->
 <section class="panel" id="p-adv">
 	<div class="hd" role="button" tabindex="0" aria-expanded="false"><span class="tw">▸</span><h2>Advanced parameters</h2><span class="st" id="adv-st">connect to see what this unit supports</span></div>
@@ -440,14 +508,50 @@ const C = {                                    // proven on hardware, 10 Sep 202
 	 * exist, and so the greyed rows below are a specification rather than a wish. Layouts are
 	 * little-endian, fixed, and small, in the style of the position characteristic. */
 	tim: 'a05c0007-9e5f-4b6a-9f3a-2d1c7e4b8a01',   // write 8 B: unix epoch ms (fixes D-1 at commissioning)
-	net: 'a05c0008-9e5f-4b6a-9f3a-2d1c7e4b8a01',   // write: apn_len apn plmn[6] mode_order[3]
 	dty: 'a05c0009-9e5f-4b6a-9f3a-2d1c7e4b8a01',   // write 8 B: cycle_s u32, listen_s u16, batch u8, pad
 	qta: 'a05c000a-9e5f-4b6a-9f3a-2d1c7e4b8a01',   // write 12 B: ltem_cap u32, sat_cap u32, sat_month u16, derate_pct u8, pad
-	dpl: 'a05c000b-9e5f-4b6a-9f3a-2d1c7e4b8a01',   // write: host_len host port u16 path_len path tok_len token
 	scn: 'a05c000c-9e5f-4b6a-9f3a-2d1c7e4b8a01',   // write 6 B: window_ms u32, rssi_min i8, pad
 	ui:  'a05c000d-9e5f-4b6a-9f3a-2d1c7e4b8a01',   // write 2 B: led_brightness_pct u8, buzzer_enabled u8 (PLAN-2026-09-12-leds-buttons)
-	sta2:'a05c000f-9e5f-4b6a-9f3a-2d1c7e4b8a01',   // read 117 B: struct status2 (M1) - this chip's counters plus the cellular half's mirror
+	/* M2, SHIPPED. Both read AND write, both the exact bytes the two chips exchange over the
+	   inter-chip link (struct cfg_net / struct cfg_dpl in each chip's src/link_proto.h). */
+	net: 'a05c0008-9e5f-4b6a-9f3a-2d1c7e4b8a01',   // rw 40 B: see NET_OFF below
+	dpl: 'a05c000b-9e5f-4b6a-9f3a-2d1c7e4b8a01',   // rw 53 B: see DPL_OFF below
+	sta2:'a05c000f-9e5f-4b6a-9f3a-2d1c7e4b8a01',   // read 131 B: struct status2 v2 - this chip's counters plus the cellular half's mirror
 };
+
+/* ── M2: the two configuration blocks, byte for byte ──────────────────────────────────────
+   Written out rather than derived, exactly as the S2/M tables below are, and for the same
+   reason: a field inserted on the firmware side and not here has to show up as a wrong number
+   rather than as nothing at all. Little-endian, packed, no padding. */
+const NET_OFF = { ALLOW: 0, ORDER: 1, PLMN_MODE: 4, PREFER: 5, LOCK: 21, ROAMING: 25, BANDS: 26, CLIMB: 50, SIZE: 52 };
+const DPL_OFF = { CLASS: 0, TRANSPORT: 1, ENCODING: 2, ENDPOINT: 3, PORT: 51, APN: 53, TOKEN: 85, SIZE: 109 };
+const ENDPOINT_MAX = 48, APN_MAX = 32, TOKEN_MAX = 24;
+/* bands are u16 because the satellite set runs to 256 (FINDINGS-M2 F-M2-1). */
+const SAT_BANDS = [23, 249, 252, 255, 256];
+const ACCESS = { LTEM: 1, NBIOT: 2, SAT: 4 };
+const ORDER_END = 0xFF;
+/* enum cfg_reason in src/bm20-ble/src/config.h. The UNIT's words, not the tool's guess: the
+   tool packs what the installer chose and lets the firmware's validator refuse it, then reads
+   the reason out of status2. Chrome throws away the ATT error code, so the byte is the channel. */
+const CFG_REASON = ['ok',
+	'MQTT and JSON are refused on a class that includes satellite',
+	'an allowed access is outside the deployment class',
+	'the order is not a permutation of the allowed accesses',
+	'a PLMN is not MCC+MNC in 100000\u2013999999',
+	'the endpoint, the port, the APN or the device token is malformed',
+	'a band is outside what that rung may lock to',
+	'an unknown deployment class, transport or encoding'];
+/* enum ladder_reason in link_proto.h — the effective ladder, one per rung (SPEC 07, D5). */
+const LADDER = ['allowed',
+	'the SIM offers no such access',
+	'this modem firmware refuses the mode',
+	'this modem firmware has no satellite',
+	'no satellite subscription',
+	'the configuration disallows it',
+	'the locked network never answered',
+	'roaming refused'];
+const PLMN_MODE = ['automatic', 'preferring a list', 'locked to one'];
+const CLASS_NAME = ['TN \u2014 terrestrial only', 'NTN \u2014 satellite only', 'TN+NTN \u2014 the ladder'];
 const METHOD = { INSTALLER_PHONE: 1, MANUAL: 2, CELLULAR: 3, SURVEY_GNSS: 4 };
 const METHOD_NAME = { 0:'none', 1:'installer phone', 2:'manual', 3:'cellular', 4:'surveyed' };
 const REFUSAL = {                              // mirrors enum prov_error in provision.c
@@ -662,20 +766,24 @@ async function readStatus(quiet) {
    src/bm20-ble/src/provision.c), so a field inserted on the firmware side and not here shows up
    as a wrong number rather than as nothing at all. Both structs are __packed and little-endian,
    both are versioned by a leading u8, and the mirror sits inside status2 at offset 3. */
-const M = {   // struct status_mirror, 52 B
+const M = {   // struct status_mirror, 60 B (ver 2 since M2: the last three are new)
 	VER: 0, BEARER_STATE: 1, RUNG: 2, FLAGS: 3, PLMN: 4, BAND: 8, RSRP: 9, SNR: 10, IMG: 11,
 	CELLID: 12, QUOTA_SPENT: 16, QUOTA_CAP: 20, SAT_SPENT: 24, SAT_CAP: 26, SAT_MONTH: 28,
 	LAST_ATTACH: 30, TRANSITIONS: 32, REASON: 33, UP_CODE: 34, RESET: 35, UP_AGE: 36,
-	UP_BYTES: 38, NEXT_WIN: 40, RESETS: 42, TEMP: 43, UPTIME: 44, FW: 48, SIZE: 52,
+	UP_BYTES: 38, NEXT_WIN: 40, RESETS: 42, TEMP: 43, UPTIME: 44, FW: 48,
+	CFG_VER: 52, LADDER: 56, PLMN_MODE: 59, SIZE: 60,
 };
-const S2 = {  // struct status2, 117 B
+/* struct status2, 131 B (ver 2). EVERY offset from 55 on moved when the embedded mirror grew
+   by eight bytes, which is exactly why ver is checked below and not merely carried. */
+const S2 = {
 	VER: 0, MIRROR_AGE: 1, MIRROR: 3,
-	DEVICES: 55, EXPECTED: 57, MISSING: 59, ADMITTED: 61, DROPPED: 65, QUARANTINED: 69,
-	SESS_OK: 73, SESS_PARTIAL: 75, SESS_REFUSED: 77, SESS_TIMEOUT: 79,
-	BONDS: 81, BONDS_MAX: 82, SCAN_DUTY: 83, LINK_ALIVE: 84,
-	STORE_RECS: 85, STORE_BYTES: 89, OLDEST_AGE: 93, OVERWRITTEN: 97, ERASE_CYCLES: 101,
-	ALERTS: 105, LATCHED: 106, DEFERRED: 107, HB_AGE: 109, UPTIME: 111, RESET: 115, RESETS: 116,
-	SIZE: 117,
+	DEVICES: 63, EXPECTED: 65, MISSING: 67, ADMITTED: 69, DROPPED: 73, QUARANTINED: 77,
+	SESS_OK: 81, SESS_PARTIAL: 83, SESS_REFUSED: 85, SESS_TIMEOUT: 87,
+	BONDS: 89, BONDS_MAX: 90, SCAN_DUTY: 91, LINK_ALIVE: 92,
+	STORE_RECS: 93, STORE_BYTES: 97, OLDEST_AGE: 101, OVERWRITTEN: 105, ERASE_CYCLES: 109,
+	ALERTS: 113, LATCHED: 114, DEFERRED: 115, HB_AGE: 117, UPTIME: 119, RESET: 123, RESETS: 124,
+	CFG_VER: 125, CFG_FLAGS: 129, CFG_REASON: 130,
+	SIZE: 131,
 };
 /* Names, taken from the firmware and nowhere else: bearer_state_name() and bearer_rung_name() in
    src/nrf9151-app/src/bearer.c, bearer_reason_name() beside them. */
@@ -705,6 +813,16 @@ function plmnStr(v) { return v ? Math.floor(v / 1000) + ' ' + String(v % 1000).p
 function monthStr(v) { return v ? Math.floor(v / 12) + '-' + String((v % 12) + 1).padStart(2, '0') : 'no clock yet'; }
 function pct(a, b) { return b ? Math.round(a * 100 / b) + ' %' : '—'; }
 
+/* The effective ladder, in the order the unit walks it. The ORDER comes from the net block this
+   page has read; the REASONS come from the mirror. When net has not been read the rungs are
+   listed by index and say so, rather than implying an order nobody stated. */
+let lastNet = null, lastDpl = null;
+function ladderWords(m) {
+	const stated = lastNet ? lastNet.order.filter(r => r < 3) : [];
+	const rest = [0, 1, 2].filter(r => stated.indexOf(r) < 0);
+	return stated.concat(rest).map(r => RUNG[r] + ' ' + (LADDER[m.ladder[r]] || ('reason ' + m.ladder[r]))).join(' \u00b7 ');
+}
+
 function parseStatus2(dv) {
 	if (dv.byteLength < S2.SIZE) throw new Error('status2 is ' + dv.byteLength + ' bytes; this firmware speaks a different layout (expected ' + S2.SIZE + ')');
 	const g8 = o => dv.getUint8(o), gi8 = o => dv.getInt8(o), g16 = o => dv.getUint16(o, true), g32 = o => dv.getUint32(o, true);
@@ -720,6 +838,8 @@ function parseStatus2(dv) {
 			upCode: g8(b + M.UP_CODE), reset: g8(b + M.RESET), upAge: g16(b + M.UP_AGE), upBytes: g16(b + M.UP_BYTES),
 			nextWin: g16(b + M.NEXT_WIN), resets: g8(b + M.RESETS), temp: gi8(b + M.TEMP),
 			uptime: g32(b + M.UPTIME), fw: g32(b + M.FW),
+			cfgVer: g32(b + M.CFG_VER), plmnMode: g8(b + M.PLMN_MODE),
+			ladder: [g8(b + M.LADDER), g8(b + M.LADDER + 1), g8(b + M.LADDER + 2)],
 		},
 		devices: g16(S2.DEVICES), expected: g16(S2.EXPECTED), missing: g16(S2.MISSING),
 		admitted: g32(S2.ADMITTED), dropped: g32(S2.DROPPED), quarantined: g32(S2.QUARANTINED),
@@ -729,6 +849,7 @@ function parseStatus2(dv) {
 		overwritten: g32(S2.OVERWRITTEN), eraseCycles: g32(S2.ERASE_CYCLES),
 		alerts: g8(S2.ALERTS), latched: g8(S2.LATCHED), deferred: g16(S2.DEFERRED),
 		hbAge: g16(S2.HB_AGE), uptime: g32(S2.UPTIME), reset: g8(S2.RESET), resets: g8(S2.RESETS),
+		cfgVer: g32(S2.CFG_VER), cfgFlags: g8(S2.CFG_FLAGS), cfgReason: g8(S2.CFG_REASON),
 	};
 }
 
@@ -737,8 +858,8 @@ function parseStatus2(dv) {
    mirrored row inside a group that is mostly ours. */
 const STATUS_GROUPS = [
 	{ id: 'ident', name: 'Identity', rows: [['unit', 'Unit'], ['fwble', 'BLE half'], ['fw91', 'Cellular half', 1], ['img', 'Image', 1]] },
-	{ id: 'comm', name: 'Commissioning', rows: [['cstate', 'State'], ['cpos', 'Position'], ['ccred', 'Credential'], ['cbonds', 'Bonds'], ['cerr', 'Last refusal']] },
-	{ id: 'net', name: 'Network', mirror: true, rows: [['bstate', 'Bearer'], ['brung', 'Rung'], ['bplmn', 'Network'], ['bcell', 'Band / cell'], ['bsig', 'Signal'], ['breason', 'Last reason'], ['battach', 'Last attach'], ['bflags', 'Flags']] },
+	{ id: 'comm', name: 'Commissioning', rows: [['cstate', 'State'], ['cpos', 'Position'], ['ccred', 'Credential'], ['cbonds', 'Bonds'], ['cerr', 'Last refusal'], ['ccfg', 'Configuration'], ['ccfgwhy', 'Last config refusal']] },
+	{ id: 'net', name: 'Network', mirror: true, rows: [['bstate', 'Bearer'], ['brung', 'Rung'], ['bladder', 'Effective ladder'], ['bpmode', 'PLMN policy'], ['bplmn', 'Network'], ['bcell', 'Band / cell'], ['bsig', 'Signal'], ['breason', 'Last reason'], ['battach', 'Last attach'], ['bflags', 'Flags']] },
 	{ id: 'quota', name: 'Quota', mirror: true, rows: [['qspent', 'Spent'], ['qsat', 'Satellite'], ['qmonth', 'Sat. month'], ['qparked', 'Governor']] },
 	{ id: 'uplink', name: 'Uplink', mirror: true, rows: [['ucode', 'Last result'], ['uage', 'When'], ['ubytes', 'Datagram'], ['unext', 'Next cycle']] },
 	{ id: 'cap', name: 'Capture', rows: [['pdev', 'Devices in window'], ['pexp', 'Expected'], ['pmiss', 'Missing'], ['padm', 'Admitted'], ['pdrop', 'Dropped'], ['pquar', 'Quarantined']] },
@@ -784,9 +905,18 @@ function renderStatus2(s) {
 	setv('ccred', lastStatus && lastStatus.hasCred ? 'held' : 'none');
 	setv('cbonds', s.bonds + ' of ' + s.bondsMax);
 	setv('cerr', lastStatus && lastStatus.lastError ? (REFUSAL[lastStatus.lastError] || lastStatus.lastError) : 'none');
+	/* The BLE half's version, and the cellular half's beside it when they disagree - which is
+	   exactly the window between a write and the next cycle boundary, and the only time an
+	   installer can be looking at a configuration that is stored and not yet in force. */
+	setv('ccfg', 'v' + n0(s.cfgVer) + ((s.cfgFlags & 0x01) ? ' \u00b7 ON TEST' : '') +
+		((s.cfgFlags & 0x02) ? ' \u00b7 ROLLED BACK' : '') +
+		(m.cfgVer !== s.cfgVer ? ' \u00b7 cellular half holds v' + n0(m.cfgVer) : ''));
+	setv('ccfgwhy', s.cfgReason ? (CFG_REASON[s.cfgReason] || ('reason ' + s.cfgReason)) : 'none');
 
 	setv('bstate', BEARER_STATE[m.state] || ('state ' + m.state));
 	setv('brung', RUNG[m.rung] || ('rung ' + m.rung));
+	setv('bladder', ladderWords(m));
+	setv('bpmode', (PLMN_MODE[m.plmnMode] || ('mode ' + m.plmnMode)));
 	setv('bplmn', plmnStr(m.plmn));
 	setv('bcell', (m.band ? 'band ' + m.band : 'band ?') + ' · cell ' + (m.cellid ? m.cellid.toString(16).toUpperCase() : '?'));
 	setv('bsig', m.rsrp ? m.rsrp + ' dBm · SNR ' + m.snr + ' dB' : 'not registered');
@@ -851,6 +981,251 @@ function startStatusPoll() {
 function stopStatusPoll() { if (sta2Timer) { clearInterval(sta2Timer); sta2Timer = null; } }
 $('b-sta2').onclick = e => { e.stopPropagation(); readStatus2(); };
 
+/* ───────────────────────── M2: network policy and deployment class ─────────────────────────
+   Two panels, one shape: read the unit, edit, write, read back and compare. The comparison is
+   the point - a write that the unit took and did not keep is the field bug of 12 Sep, and the
+   position characteristic already learned it the hard way.
+
+   Neither panel validates the SEMANTICS locally. It packs what the installer chose, lets the
+   firmware's validator refuse it, and then reads the reason out of status2 and prints it in
+   words. Two validators would drift, and the one that matters is the one on the unit. */
+
+const RUNG_OPT = ['—', 'LTE-M', 'NB-IoT', 'satellite'];
+
+function plmnToU32(text) {
+	const t = (text || '').replace(/\D/g, '');
+	if (t.length < 5 || t.length > 6) return t.length ? NaN : 0;
+	return parseInt(t.slice(0, 3), 10) * 1000 + parseInt(t.slice(3), 10);
+}
+function plmnToText(v) {
+	if (!v) return '';
+	const mcc = Math.floor(v / 1000), mnc = v % 1000;
+	return String(mcc).padStart(3, '0') + (mnc < 100 ? String(mnc).padStart(2, '0') : String(mnc));
+}
+function bandsToText(a) { return a.filter(x => x).join(', '); }
+function textToBands(t) {
+	const out = [0, 0, 0, 0];
+	(t || '').split(/[^0-9]+/).filter(x => x).slice(0, 4).forEach((x, i) => { out[i] = Number(x) & 0xffff; });
+	return out;
+}
+
+function packNet(n) {
+	const b = new ArrayBuffer(NET_OFF.SIZE), v = new DataView(b);
+	v.setUint8(NET_OFF.ALLOW, n.allow);
+	for (let i = 0; i < 3; i++) v.setUint8(NET_OFF.ORDER + i, n.order[i]);
+	v.setUint8(NET_OFF.PLMN_MODE, n.plmnMode);
+	for (let i = 0; i < 4; i++) v.setUint32(NET_OFF.PREFER + i * 4, n.prefer[i] || 0, true);
+	v.setUint32(NET_OFF.LOCK, n.lock || 0, true);
+	v.setUint8(NET_OFF.ROAMING, n.roaming ? 1 : 0);
+	for (let r = 0; r < 3; r++) for (let k = 0; k < 4; k++) v.setUint16(NET_OFF.BANDS + (r * 4 + k) * 2, n.bands[r][k] || 0, true);
+	v.setUint16(NET_OFF.CLIMB, n.climb || 0, true);
+	return b;
+}
+function parseNet(dv) {
+	if (dv.byteLength < NET_OFF.SIZE) throw new Error('net is ' + dv.byteLength + ' bytes; expected ' + NET_OFF.SIZE);
+	const g8 = o => dv.getUint8(o), g32 = o => dv.getUint32(o, true);
+	return {
+		allow: g8(NET_OFF.ALLOW),
+		order: [g8(NET_OFF.ORDER), g8(NET_OFF.ORDER + 1), g8(NET_OFF.ORDER + 2)],
+		plmnMode: g8(NET_OFF.PLMN_MODE),
+		prefer: [0, 1, 2, 3].map(i => g32(NET_OFF.PREFER + i * 4)),
+		lock: g32(NET_OFF.LOCK),
+		roaming: g8(NET_OFF.ROAMING),
+		bands: [0, 1, 2].map(r => [0, 1, 2, 3].map(k => dv.getUint16(NET_OFF.BANDS + (r * 4 + k) * 2, true))),
+		climb: dv.getUint16(NET_OFF.CLIMB, true),
+	};
+}
+function packDpl(d) {
+	const b = new ArrayBuffer(DPL_OFF.SIZE), v = new DataView(b), u = new Uint8Array(b);
+	v.setUint8(DPL_OFF.CLASS, d.cls); v.setUint8(DPL_OFF.TRANSPORT, d.transport); v.setUint8(DPL_OFF.ENCODING, d.encoding);
+	u.set(enc(d.endpoint).slice(0, ENDPOINT_MAX - 1), DPL_OFF.ENDPOINT);   // always room for the NUL
+	v.setUint16(DPL_OFF.PORT, d.port, true);
+	u.set(enc(d.apn || '').slice(0, APN_MAX - 1), DPL_OFF.APN);
+	u.set(enc(d.token || '').slice(0, TOKEN_MAX - 1), DPL_OFF.TOKEN);
+	return b;
+}
+function parseDpl(dv) {
+	if (dv.byteLength < DPL_OFF.SIZE) throw new Error('dpl is ' + dv.byteLength + ' bytes; expected ' + DPL_OFF.SIZE);
+	/* Byte by byte through the DataView, for the realm reason above: the endpoint is read out
+	   of the view rather than out of a Uint8Array made over its buffer. */
+	const bytes = [];
+	for (let i = 0; i < ENDPOINT_MAX; i++) {
+		const c = dv.getUint8(DPL_OFF.ENDPOINT + i);
+		if (!c) break;
+		bytes.push(c);
+	}
+	const str = (base, cap) => {
+		const out = [];
+		for (let i = 0; i < cap; i++) { const c = dv.getUint8(base + i); if (!c) break; out.push(c); }
+		return new TextDecoder().decode(Uint8Array.from(out));
+	};
+	return {
+		cls: dv.getUint8(DPL_OFF.CLASS), transport: dv.getUint8(DPL_OFF.TRANSPORT), encoding: dv.getUint8(DPL_OFF.ENCODING),
+		endpoint: new TextDecoder().decode(Uint8Array.from(bytes)),
+		port: dv.getUint16(DPL_OFF.PORT, true),
+		apn: str(DPL_OFF.APN, APN_MAX),
+		/* Always empty on a read: the unit never echoes the credential (provision.c read_dpl). */
+		token: str(DPL_OFF.TOKEN, TOKEN_MAX),
+	};
+}
+
+function netFromForm() {
+	const allow = ($('n-a0').getAttribute('aria-pressed') === 'true' ? ACCESS.LTEM : 0) |
+		($('n-a1').getAttribute('aria-pressed') === 'true' ? ACCESS.NBIOT : 0) |
+		($('n-a2').getAttribute('aria-pressed') === 'true' ? ACCESS.SAT : 0);
+	const order = [0, 1, 2].map(i => { const v = $('n-ord' + i).value; return v === '' ? ORDER_END : Number(v); });
+	return {
+		allow, order,
+		plmnMode: Number($('n-pmode').value),
+		prefer: [0, 1, 2, 3].map(i => plmnToU32($('n-pref' + i).value)),
+		lock: plmnToU32($('n-lock').value),
+		roaming: Number($('n-roam').value),
+		bands: [0, 1, 2].map(r => textToBands($('n-b' + r).value)),
+		climb: Number($('n-climb').value) || 0,
+	};
+}
+function netToForm(n) {
+	$('n-a0').setAttribute('aria-pressed', !!(n.allow & ACCESS.LTEM));
+	$('n-a1').setAttribute('aria-pressed', !!(n.allow & ACCESS.NBIOT));
+	$('n-a2').setAttribute('aria-pressed', !!(n.allow & ACCESS.SAT));
+	for (let i = 0; i < 3; i++) $('n-ord' + i).value = n.order[i] < 3 ? String(n.order[i]) : '';
+	$('n-pmode').value = String(n.plmnMode);
+	for (let i = 0; i < 4; i++) $('n-pref' + i).value = plmnToText(n.prefer[i]);
+	$('n-lock').value = plmnToText(n.lock);
+	$('n-roam').value = String(n.roaming ? 1 : 0);
+	for (let r = 0; r < 3; r++) $('n-b' + r).value = bandsToText(n.bands[r]);
+	$('n-climb').value = String(n.climb);
+	$('net-st').textContent = 'allow ' + (['LTE-M', 'NB-IoT', 'satellite'].filter((_, i) => n.allow & (1 << i)).join(' ') || 'nothing') +
+		' · ' + (PLMN_MODE[n.plmnMode] || n.plmnMode);
+}
+function dplFromForm() {
+	return { cls: Number($('d-class').value), transport: Number($('d-transport').value), encoding: Number($('d-encoding').value),
+		endpoint: $('d-endpoint').value.trim(), port: Number($('d-port').value),
+		apn: $('d-apn').value.trim(), token: $('d-token').value.trim() };
+}
+/* The token box is NEVER filled from the unit - the unit does not send it back. It is left
+   exactly as the installer typed it, so a read arriving mid-edit cannot wipe what they are in
+   the middle of writing. */
+function dplToForm(d) {
+	$('d-class').value = String(d.cls); $('d-transport').value = String(d.transport); $('d-encoding').value = String(d.encoding);
+	$('d-endpoint').value = d.endpoint; $('d-port').value = String(d.port); $('d-apn').value = d.apn || '';
+	$('dpl-st').textContent = (CLASS_NAME[d.cls] || ('class ' + d.cls)) + ' · ' + d.endpoint + ':' + d.port +
+		(d.apn ? ' · apn ' + d.apn : '');
+}
+
+/* Why the reason comes from a status read and not from the thrown error: Chrome reports every
+   application ATT error as "GATT operation failed for unknown reason", so the unit's cfg_reason
+   byte is the only channel there is. If status2 is not there either, say that rather than
+   inventing a cause. */
+async function refusalWords(fallback) {
+	if (!chars.sta2) return fallback;
+	const s = await readStatus2();
+	if (!s) return fallback;
+	return s.cfgReason ? (CFG_REASON[s.cfgReason] || ('reason ' + s.cfgReason)) : fallback;
+}
+
+/* Compared through DataView getters on both sides rather than by making a Uint8Array of each.
+   The buffer that comes back from a GATT read does not always belong to this realm - the same
+   trap the test harness names - and a comparison that silently constructs an empty view would
+   report every read-back as a match, which is the one answer this check must never give. */
+function dvHex(dv) { let o = ''; for (let i = 0; i < dv.byteLength; i++) o += dv.getUint8(i).toString(16).padStart(2, '0').toUpperCase(); return o; }
+/* `skip` is a [from, length] range the unit is KNOWN not to echo. Today that is the dpl block's
+   device token, which read_dpl() serves zeroed on purpose. Comparing it would report a mismatch
+   the tool itself caused, and an installer who saw "read-back differs" on a good write would
+   quite reasonably write it again. So it is excluded, by name, and said on screen. */
+function sameBytes(buf, dv, skip) {
+	const a = new DataView(buf);
+	if (a.byteLength !== dv.byteLength) return false;
+	for (let i = 0; i < a.byteLength; i++) {
+		if (skip && i >= skip[0] && i < skip[0] + skip[1]) continue;
+		if (a.getUint8(i) !== dv.getUint8(i)) return false;
+	}
+	return true;
+}
+
+async function readNet(quiet) {
+	if (!chars.net) return null;
+	try {
+		const n = parseNet(await gattOp(() => chars.net.readValue(), 'net'));
+		lastNet = n; netToForm(n);
+		if (!quiet) say('network policy read from the unit');
+		return n;
+	} catch (e) { say('could not read the network policy: ' + explainWriteError(e), 'bad'); return null; }
+}
+async function readDpl(quiet) {
+	if (!chars.dpl) return null;
+	try {
+		const d = parseDpl(await gattOp(() => chars.dpl.readValue(), 'dpl'));
+		lastDpl = d; dplToForm(d);
+		if (!quiet) say('deployment class read from the unit');
+		return d;
+	} catch (e) { say('could not read the deployment class: ' + explainWriteError(e), 'bad'); return null; }
+}
+
+async function writeBlock(kind) {
+	const isNet = kind === 'net';
+	const note = $(isNet ? 'n-netnote' : 'n-dplnote');
+	const name = isNet ? 'network policy' : 'deployment class';
+	let buf;
+	try {
+		buf = isNet ? packNet(netFromForm()) : packDpl(dplFromForm());
+	} catch (e) {
+		note.innerHTML = '<p class="note stop"><b>Not written.</b> ' + e.message + '</p>';
+		return false;
+	}
+	if (isNet && new Uint8Array(buf).length !== NET_OFF.SIZE) return false;
+	note.innerHTML = '<div class="bytes">writing <b>' + hex(buf) + '</b></div>';
+	try {
+		await gattOp(() => (chars[kind].writeValueWithResponse ? chars[kind].writeValueWithResponse(buf) : chars[kind].writeValue(buf)), kind);
+	} catch (e) {
+		const why = await refusalWords(explainWriteError(e));
+		say(name + ' refused: ' + why, 'bad');
+		note.innerHTML += '<p class="note stop"><b>Refused: ' + why + '</b> — this is the unit protecting itself, not a fault. Nothing changed on it.</p>';
+		return false;
+	}
+	/* The write is not the proof; the read-back is. */
+	let back;
+	try {
+		back = await gattOp(() => chars[kind].readValue(), kind + ' read-back');
+	} catch (e) {
+		say(name + ' written, but it could not be read back — not trusting it', 'bad');
+		note.innerHTML += '<p class="note stop"><b>Not confirmed.</b> The read after the write failed.</p>';
+		return false;
+	}
+	const skip = isNet ? null : [DPL_OFF.TOKEN, TOKEN_MAX];
+	if (!sameBytes(buf, back, skip)) {
+		say(name + ' read back DIFFERENT from what was written', 'bad');
+		note.innerHTML += '<div class="bytes">read back <b>' + dvHex(back) + '</b></div><p class="note stop"><b>Read-back differs.</b> The unit holds something else.</p>';
+		return false;
+	}
+	if (isNet) { lastNet = parseNet(back); netToForm(lastNet); } else { lastDpl = parseDpl(back); dplToForm(lastDpl); }
+	say(name + ' written, read back: matches' + (skip ? ' (the device token is not compared: the unit never echoes it)' : ''), 'good');
+	note.innerHTML += '<p class="note go"><b>Written and read back.</b>' +
+		(skip ? ' The device token is <b>not compared</b> — the unit deliberately never sends a credential back, so there is nothing to compare it against. Keep it in the fleet register.' : '') +
+		' It is on test for three boots: if the unit fails its health gate under it, the previous one comes back and the status panel says so.</p>';
+	if (chars.sta2) setTimeout(readStatus2, 300);
+	return true;
+}
+
+$('b-netread').onclick = e => { e.stopPropagation(); readNet(false); };
+$('b-dplread').onclick = e => { e.stopPropagation(); readDpl(false); };
+$('b-netwrite').onclick = async e => { e.stopPropagation(); $('b-netwrite').disabled = true; await writeBlock('net'); $('b-netwrite').disabled = false; };
+$('b-dplwrite').onclick = async e => { e.stopPropagation(); $('b-dplwrite').disabled = true; await writeBlock('dpl'); $('b-dplwrite').disabled = false; };
+['n-a0', 'n-a1', 'n-a2'].forEach(id => { $(id).onclick = () => $(id).setAttribute('aria-pressed', $(id).getAttribute('aria-pressed') !== 'true'); });
+[0, 1, 2].forEach(i => {
+	const sel = $('n-ord' + i);
+	sel.innerHTML = RUNG_OPT.map((o, k) => '<option value="' + (k ? k - 1 : '') + '">' + o + '</option>').join('');
+});
+
+/* Live only where the unit exposes them. Hidden, not greyed: a grid of dashes reads as a broken
+   unit rather than an older one, which is the rule the status panel already follows. */
+function showCfgPanels() {
+	$('p-net').hidden = !chars.net;
+	$('p-dpl').hidden = !chars.dpl;
+	if (chars.net) readNet(true);
+	if (chars.dpl) readDpl(true);
+}
+
 /* ───────────────────────── connect ───────────────────────── */
 $('b-connect').onclick = async () => {
 	if (!preflight()) { say('pre-flight is blocking — see the checks above', 'bad'); $('p-pre').classList.add('open'); return; }
@@ -893,6 +1268,7 @@ $('b-connect').onclick = async () => {
 		/* Only on firmware that has it. On anything older the panel stays hidden rather than
 		 * showing a grid of dashes, which reads as a broken unit rather than an old one. */
 		startStatusPoll();
+		showCfgPanels();
 	} catch (e) {
 		if (e.name === 'NotFoundError') { say('no unit chosen'); return; }
 		if (e.name === 'SecurityError') { $('n-connect').innerHTML = '<p class="note stop"><b>Bluetooth is blocked here.</b> Open the page in its own tab.</p>'; return; }
@@ -1058,18 +1434,19 @@ $('reg-clear').onclick = e => { e.stopPropagation(); if (!register.length) retur
    kept per profile so a site's settings travel with it. */
 const PARAMS = [
 	{ id: 'time', cap: 'tim', name: 'Time (unix epoch)', kind: 'auto', note: 'written from this device at commissioning — the record timestamp then carries an epoch instead of uptime (defect D-1)', pack: () => { const b = new ArrayBuffer(8); new DataView(b).setBigUint64(0, BigInt(Date.now()), true); return b; } },
-	{ id: 'apn', cap: 'net', name: 'APN', kind: 'text', def: '', note: 'blank = the SIM\'s default; a managed IoT APN may not resolve DNS (FN-92)' },
-	{ id: 'plmn', cap: 'net', name: 'PLMN lock', kind: 'text', def: '', note: 'MCC+MNC, e.g. 23410 for O2 UK; blank = automatic' },
-	{ id: 'modes', cap: 'net', name: 'Bearer order', kind: 'select', def: 'ltem,nbiot,ntn', opts: ['ltem,nbiot,ntn', 'ltem,ntn', 'nbiot,ntn', 'ltem', 'ntn'], note: 'the ladder bearer.c descends; satellite last unless there is no cell' },
+	/* PLMN lock and bearer order moved to the Network policy panel, and APN is NOT in the M2
+	   net block at all - the SIM's default is used. Leaving greyed rows here that point at a
+	   characteristic which now exists would make the tool write the OLD proposed layout to a
+	   real attribute, which is worse than not offering it. See FINDINGS-M2 F-M2-6. */
 	{ id: 'cycle', cap: 'dty', name: 'Cycle period, s', kind: 'number', def: 900, min: 60, max: 86400, note: 'the biggest lever on data cost: halving the rate halves the bytes' },
 	{ id: 'listen', cap: 'dty', name: 'Listen window, s', kind: 'number', def: 20, min: 5, max: 600, note: 'how long the BLE half is read before the radio comes on' },
 	{ id: 'batch', cap: 'dty', name: 'Records per send', kind: 'number', def: 8, min: 1, max: 32, note: '8 fits one LTE-M datagram; satellite carries 1' },
 	{ id: 'ltemcap', cap: 'qta', name: 'LTE-M allowance, bytes', kind: 'number', def: 500000, min: 10000, max: 100000000, note: 'the governor parks the unit here; plan against 85 %' },
 	{ id: 'satcap', cap: 'qta', name: 'Satellite allowance, bytes/month', kind: 'number', def: 50000, min: 1000, max: 10000000, note: 'a MONTHLY window — the shipped firmware still counts a lifetime total (defect)' },
 	{ id: 'derate', cap: 'qta', name: 'Budget, % of allowance', kind: 'number', def: 85, min: 50, max: 100, note: 'the operator\'s rule: never plan to 100 %' },
-	{ id: 'dphost', cap: 'dpl', name: 'Data-plane host', kind: 'text', def: 'coap.thingsboard.cloud', note: 'hosted CoAP transport, proven 11 Sep (2.01)' },
-	{ id: 'dpport', cap: 'dpl', name: 'Data-plane port', kind: 'number', def: 5683, min: 1, max: 65535, note: '5683 plain, 5684 DTLS (DTLS cost on satellite unmeasured)' },
-	{ id: 'dptoken', cap: 'dpl', name: 'Data-plane device token', kind: 'secret', def: '', note: 'the ThingsBoard access token for THIS unit; distinct from the PSK above' },
+	/* Host and port moved to the Deployment class panel. The device TOKEN is not in the M2 dpl
+	   block: this firmware still carries it at build time, which is the one thing about the
+	   data plane an installer still cannot set. FINDINGS-M2 F-M2-7. */
 	{ id: 'scanwin', cap: 'scn', name: 'BLE digest window, ms', kind: 'number', def: 60000, min: 5000, max: 600000, note: 'observations are summarised per window per device' },
 	{ id: 'rssimin', cap: 'scn', name: 'RSSI floor, dBm', kind: 'number', def: -100, min: -127, max: 0, note: 'weaker adverts are not counted' },
 	{ id: 'ledpct', cap: 'ui', name: 'LED brightness, %', kind: 'number', def: 100, min: 0, max: 100, note: 'below 20 only the solid states are drawn (a night site); 0 is dark' },
@@ -1166,17 +1543,22 @@ $('b-writeadv').onclick = async () => {
 $('b-advspec').onclick = e => {
 	e.stopPropagation();
 	const spec = ['# BLG20 commissioning service — characteristic specification', '', 'Service ' + SVC, '', '## Shipped (v1 firmware, proven 10 Sep 2026)', ...['pos', 'crd', 'lbl', 'cmd', 'sta'].map(k => '- ' + k + '  ' + C[k]), '',
+		'## Shipped (M2)', '',
+		'net ' + C.net + '  read/write 52 B  allow u8 @0 (bit0 LTE-M, bit1 NB-IoT, bit2 satellite), order u8[3] @1 (rung indices, 0xFF ends), plmn_mode u8 @4 (0 auto, 1 prefer, 2 lock), prefer u32[4] @5 (MCC*1000+MNC, 0 empty), lock u32 @21, roaming u8 @25, bands u16[3][4] @26 (per rung, 0 ends; satellite is 23/249/252/255/256, which is why they are 16-bit), climb_back_s u16 @50',
+		'dpl ' + C.dpl + '  read/write 109 B  class u8 @0 (0 TN, 1 NTN, 2 TN+NTN), transport u8 @1 (0 CoAP/DTLS-CID, 1 MQTT/TLS), encoding u8 @2 (0 JSON, 1 CBOR, 2 protobuf), endpoint char[48] @3 NUL-terminated, port u16 @51, apn char[32] @53 (empty = the SIM default; applied with +CGDCONT=0,"IP","<apn>" at CFUN=0), token char[24] @85 (8-23 alphanumerics; empty = keep the build-time constant)',
+		'  THE TOKEN IS WRITE-ONLY. The read handler serves the block with token[] zeroed, always. A client must not compare that field on read-back and must not expect to recover a credential from a unit.',
+		'  Refusals are a closed set (enum cfg_reason) reported in status2 byte 130: 1 MQTT/JSON with satellite, 2 allow outside the class, 3 order not a permutation of allow, 4 bad PLMN, 5 bad endpoint / port / APN / token, 6 bad band, 7 unknown class/transport/encoding.',
+		'  A write is validated, versioned (cfg_ver, monotonic), stamped with the bonded peer as provenance, stored with the previous one kept, and marked ON TEST for three boots. It reaches the cellular half as FRAME_CFG 0x19 and takes effect at that chip\'s next cycle boundary. If the cellular half\'s health gate passes it answers LINK_CMD_CFG_OK (12) and the flag clears; three boots without one restores the previous configuration and sets the rolled-back bit.', '',
 		'## Proposed — exposed by no firmware yet; the tool enables each row the day the unit exposes it', '',
 		'tim ' + C.tim + '  write 8 B  unix epoch ms (u64 LE). Fixes D-1: the record timestamp becomes an epoch.',
-		'net ' + C.net + '  write     apn_len u8, apn[], plmn[6] ascii (blank = auto), mode_order[3] (1 LTE-M, 2 NB-IoT, 3 NTN, 0 end)',
 		'dty ' + C.dty + '  write 8 B  cycle_s u32, listen_s u16, batch u8, pad u8',
 		'qta ' + C.qta + '  write 12 B ltem_cap u32 bytes, sat_cap u32 bytes per MONTH, sat_month u16 (yyyymm the window started), derate_pct u8, pad',
-		'dpl ' + C.dpl + '  write     host_len u8, host[], port u16, path_len u8, path[], tok_len u8, token[]',
 		'scn ' + C.scn + '  write 6 B  window_ms u32, rssi_min i8, pad u8',
 		'ui  ' + C.ui + '  write 2 B  led_brightness_pct u8 (5-100), buzzer_enabled u8 (0/1)',
+
 		'cmd ' + C.cmd + '  write 1 B  1 commission (shipped), 2 test uplink, 3 reboot, 4 factory reset (requires a second write of 0xA5 within 5 s), 5 identify (both LEDs white x3, two buzzer ticks)',
 		'cmd ' + C.cmd + '  write 4 B  byte 0 command, bytes 1-3 args (M1): 6 force_rung(rung, 0xFF clears) and 7 status_now are forwarded to the cellular half as FRAME_CMD 0x18; 8 window(0 close / 1 open); 9 clear_latch(device u16, rule u8) and 10 republish_table are accepted and not acted on until M4',
-		'sta2 ' + C.sta2 + '  read 117 B  struct status2 (M1): ver u8, mirror_age_s u16 (0xFFFF never), struct status_mirror (52 B, FRAME_STATUS_MIRROR 0x17), then this chip\'s counters. Offsets in the tool\'s S2/M tables.', '',
+		'sta2 ' + C.sta2 + '  read 131 B  struct status2 VERSION 2: ver u8, mirror_age_s u16 (0xFFFF never), struct status_mirror (60 B, FRAME_STATUS_MIRROR 0x17, ver 2 - it gained cfg_ver u32, ladder u8[3] and plmn_mode u8), then this chip\'s counters, then cfg_ver u32, cfg_flags u8 (bit0 on test, bit1 rolled back) and cfg_reason u8. Every offset from 55 on moved with the mirror; check ver. Offsets in the tool\'s S2/M tables.', '',
 		'All writes need an authenticated link (BT_GATT_PERM_WRITE_AUTHEN) and the peripheral must call bt_conn_set_security(conn, BT_SECURITY_L4) on connect — Web Bluetooth cannot initiate pairing.',
 		'Every parameter is readable back through sta (extend status_wire) so the tool can compare what it wrote with what the unit holds.', '',
 		'Generated by the commissioner tool, ' + iso()].join('\n');
