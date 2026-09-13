@@ -581,6 +581,9 @@
 'use strict';
 /* ───────────────────────── the contract with the unit ───────────────────────── */
 const SVC   = 'a05c0001-9e5f-4b6a-9f3a-2d1c7e4b8a01';
+/* The data-in service (M5). Web Bluetooth only hands a page the services it asked for at
+   requestDevice, so it is named here; the panel itself never writes to it. A bench driver does. */
+const DATAIN_SVC = 'a05c0100-9e5f-4b6a-9f3a-2d1c7e4b8a01';
 const C = {                                    // proven on hardware, 10 Sep 2026
 	pos: 'a05c0002-9e5f-4b6a-9f3a-2d1c7e4b8a01',   // write 15 B: lat_e7 lon_e7 alt_cm unc_m method
 	crd: 'a05c0003-9e5f-4b6a-9f3a-2d1c7e4b8a01',   // write: ilen plen identity psk
@@ -1920,7 +1923,7 @@ $('b-connect').onclick = async () => {
 	if (!preflight()) { say('pre-flight is blocking — see the checks above', 'bad'); $('p-pre').classList.add('open'); return; }
 	try {
 		say('scanning');
-		dev = await navigator.bluetooth.requestDevice({ filters: [{ namePrefix: 'Adsum BLG20' }, { services: [SVC] }, { namePrefix: 'Adsum' }], optionalServices: [SVC] });
+		dev = await navigator.bluetooth.requestDevice({ filters: [{ namePrefix: 'Adsum BLG20' }, { services: [SVC] }, { namePrefix: 'Adsum' }], optionalServices: [SVC, DATAIN_SVC] });
 		dev.addEventListener('gattserverdisconnected', () => {
 			say('the unit disconnected', 'bad'); $('u-name').textContent = 'disconnected'; $('u-pk').hidden = true; $('u-name').className = 'pill stop'; $('b-disconnect').disabled = true; $('b-connect').textContent = 'Reconnect';
 			if (wake) { try { wake.release(); } catch (_) {} wake = null; }
