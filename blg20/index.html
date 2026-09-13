@@ -396,6 +396,26 @@
 </section>
 
 <!-- ── advanced parameters ── -->
+<!-- M4: the rule set (…0010) -->
+<section class="panel" id="p-rules" hidden>
+	<div class="hd" role="button" tabindex="0" aria-expanded="false"><span class="tw">▸</span><h2>Rules</h2><span class="st" id="rules-st">—</span></div>
+	<div class="bd">
+		<p class="note">A rule turns a stream of readings into <b>two events</b>: one enter and one exit. <b>Hysteresis</b> is what stops a value sitting on the threshold from alarming sixty times a minute — the condition ends at a different value from the one that started it. <b>Hold</b> is how long a state must last before it is reported at all. <b>Latch</b> keeps it raised until somebody clears it (Advanced → “Clear a latched alert”). <b>Renotify</b> repeats it while it is raised, on the one interval below.</p>
+		<p class="note warn">A rule set is applied at the <b>next window boundary</b>, not at the write. The read-back is what is <b>in force</b>, so it may still show the previous set for up to one window — that is the unit being honest, not a failed write.</p>
+		<div class="scroll">
+			<table class="params" id="rules-tbl">
+				<thead><tr><th>id</th><th>device</th><th>field</th><th>when</th><th>value</th><th>hysteresis</th><th>hold, s</th><th>severity</th><th>flags</th><th></th></tr></thead>
+				<tbody id="rules-body"></tbody>
+			</table>
+		</div>
+		<div class="grid" style="margin-top:10px">
+			<div class="field"><label for="r-renotify">Re-notify every, s</label><input type="number" id="r-renotify" class="mono" min="0" max="65535" value="0"><span class="hint">0 = never. One interval for the whole set: twelve bytes a rule had no room for a second period, so the <b>flag</b> is per rule and the <b>period</b> is shared</span></div>
+		</div>
+		<div class="row" style="margin-top:12px"><button class="btn sm" id="b-ruleadd">Add a rule</button><button class="btn" id="b-ruleswrite">Write and read back</button><button class="btn quiet" id="b-rulesread">Read from the unit</button></div>
+		<div id="n-rulesnote"></div>
+	</div>
+</section>
+
 <section class="panel" id="p-adv">
 	<div class="hd" role="button" tabindex="0" aria-expanded="false"><span class="tw">▸</span><h2>Advanced parameters</h2><span class="st" id="adv-st">connect to see what this unit supports</span></div>
 	<div class="bd">
@@ -516,7 +536,11 @@ const C = {                                    // proven on hardware, 10 Sep 202
 	   inter-chip link (struct cfg_net / struct cfg_dpl in each chip's src/link_proto.h). */
 	net: 'a05c0008-9e5f-4b6a-9f3a-2d1c7e4b8a01',   // rw 40 B: see NET_OFF below
 	dpl: 'a05c000b-9e5f-4b6a-9f3a-2d1c7e4b8a01',   // rw 53 B: see DPL_OFF below
-	sta2:'a05c000f-9e5f-4b6a-9f3a-2d1c7e4b8a01',   // read 131 B: struct status2 v2 - this chip's counters plus the cellular half's mirror
+	sta2:'a05c000f-9e5f-4b6a-9f3a-2d1c7e4b8a01',   // read 140 B: struct status2 v3 - this chip's counters plus the cellular half's mirror
+	/* M4, SHIPPED. 200 bytes: struct link_rules - a count, a re-notification period and sixteen
+	   twelve-byte rules. The same bytes the unit stores and the same bytes that cross the
+	   inter-chip link, exactly as net and dpl are. */
+	rul: 'a05c0010-9e5f-4b6a-9f3a-2d1c7e4b8a01',
 };
 
 /* ── M2: the two configuration blocks, byte for byte ──────────────────────────────────────
@@ -540,7 +564,35 @@ const CFG_REASON = ['ok',
 	'a PLMN is not MCC+MNC in 100000\u2013999999',
 	'the endpoint, the port, the APN or the device token is malformed',
 	'a band is outside what that rung may lock to',
-	'an unknown deployment class, transport or encoding'];
+	'an unknown deployment class, transport or encoding',
+	'the rule set names something this firmware cannot act on'];
+/* enum rules_reason in rules.h. The SECOND sentence: cfg_reason says the rule set was refused,
+   this says which clause of which rule did it, and only that one tells the installer what to
+   change. */
+const RULES_REASON = ['ok',
+	'a rule names a field this firmware does not extract',
+	'a rule names an operator this firmware does not have',
+	'a rule id is 0, or two rules share one id',
+	'more rules than this firmware holds',
+	'that operator cannot be applied to that field'];
+/* enum rule_field / rule_op / rule_sev in link_proto.h. The names the panel shows and the numbers
+   the twelve-byte record carries; the SCALE is what makes 800 read as 8.00 C. */
+const RULE_FIELDS = [
+	{ id: 1, name: 'temperature', unit: '\u00b0C', scale: 100 },
+	{ id: 2, name: 'humidity', unit: '%', scale: 1 },
+	{ id: 3, name: 'battery', unit: '%', scale: 1 },
+	{ id: 4, name: 'door', unit: '0/1', scale: 1 },
+	{ id: 5, name: 'RSSI', unit: 'dBm', scale: 1 },
+	{ id: 6, name: 'presence', unit: 's', scale: 1 },
+];
+const RULE_OPS = [
+	{ id: 0, name: '> greater than' }, { id: 1, name: '< less than' },
+	{ id: 2, name: '== equals' }, { id: 3, name: 'rate> faster than' },
+	{ id: 4, name: 'absent for' },
+];
+const RULE_SEV = ['info', 'warning', 'alarm'];
+const RULE_MAX = 16;
+const RULES_SIZE = 200;
 /* enum ladder_reason in link_proto.h — the effective ladder, one per rung (SPEC 07, D5). */
 const LADDER = ['allowed',
 	'the SIM offers no such access',
@@ -773,8 +825,9 @@ const M = {   // struct status_mirror, 60 B (ver 2 since M2: the last three are 
 	UP_BYTES: 38, NEXT_WIN: 40, RESETS: 42, TEMP: 43, UPTIME: 44, FW: 48,
 	CFG_VER: 52, LADDER: 56, PLMN_MODE: 59, SIZE: 60,
 };
-/* struct status2, 131 B (ver 2). EVERY offset from 55 on moved when the embedded mirror grew
-   by eight bytes, which is exactly why ver is checked below and not merely carried. */
+/* struct status2, 140 B (ver 3). EVERY offset from 55 on moved at version 2, when the embedded
+   mirror grew by eight bytes — which is exactly why ver is checked below and not merely carried.
+   Version 3 APPENDED its nine bytes, so every offset a version-2 parser knows is unchanged. */
 const S2 = {
 	VER: 0, MIRROR_AGE: 1, MIRROR: 3,
 	DEVICES: 63, EXPECTED: 65, MISSING: 67, ADMITTED: 69, DROPPED: 73, QUARANTINED: 77,
@@ -783,7 +836,9 @@ const S2 = {
 	STORE_RECS: 93, STORE_BYTES: 97, OLDEST_AGE: 101, OVERWRITTEN: 105, ERASE_CYCLES: 109,
 	ALERTS: 113, LATCHED: 114, DEFERRED: 115, HB_AGE: 117, UPTIME: 119, RESET: 123, RESETS: 124,
 	CFG_VER: 125, CFG_FLAGS: 129, CFG_REASON: 130,
-	SIZE: 131,
+	/* M4 */
+	RULES_REASON: 131, LA_DEV: 132, LA_RULE: 134, LA_SEV: 135, LA_FLAGS: 136, LA_AGE: 138,
+	SIZE: 140,
 };
 /* Names, taken from the firmware and nowhere else: bearer_state_name() and bearer_rung_name() in
    src/nrf9151-app/src/bearer.c, bearer_reason_name() beside them. */
@@ -850,6 +905,9 @@ function parseStatus2(dv) {
 		alerts: g8(S2.ALERTS), latched: g8(S2.LATCHED), deferred: g16(S2.DEFERRED),
 		hbAge: g16(S2.HB_AGE), uptime: g32(S2.UPTIME), reset: g8(S2.RESET), resets: g8(S2.RESETS),
 		cfgVer: g32(S2.CFG_VER), cfgFlags: g8(S2.CFG_FLAGS), cfgReason: g8(S2.CFG_REASON),
+		rulesReason: g8(S2.RULES_REASON),
+		la: { dev: g16(S2.LA_DEV), rule: g8(S2.LA_RULE), sev: g8(S2.LA_SEV),
+		      flags: g8(S2.LA_FLAGS), age: g16(S2.LA_AGE) },
 	};
 }
 
@@ -864,7 +922,7 @@ const STATUS_GROUPS = [
 	{ id: 'uplink', name: 'Uplink', mirror: true, rows: [['ucode', 'Last result'], ['uage', 'When'], ['ubytes', 'Datagram'], ['unext', 'Next cycle']] },
 	{ id: 'cap', name: 'Capture', rows: [['pdev', 'Devices in window'], ['pexp', 'Expected'], ['pmiss', 'Missing'], ['padm', 'Admitted'], ['pdrop', 'Dropped'], ['pquar', 'Quarantined']] },
 	{ id: 'store', name: 'Store', rows: [['srec', 'Records held'], ['sbytes', 'Bytes'], ['soldest', 'Oldest'], ['sover', 'Overwritten'], ['serase', 'Erase cycles']] },
-	{ id: 'alerts', name: 'Alerts', rows: [['aact', 'Active'], ['alat', 'Latched'], ['adef', 'Deferred']] },
+	{ id: 'alerts', name: 'Alerts', rows: [['aact', 'Active'], ['alat', 'Latched'], ['adef', 'Deferred'], ['alast', 'Last alert'], ['arule', 'Rules'], ['awhy', 'Last rule refusal']] },
 	{ id: 'health', name: 'Health', rows: [['hlink', 'Inter-chip link'], ['hhb', 'Last heartbeat'], ['hmir', 'Mirror age'], ['hup', 'BLE uptime'], ['hup91', 'Cellular uptime', 1], ['hreset', 'BLE reset cause'], ['hreset91', 'Cellular reset cause', 1], ['hduty', 'Scan duty'], ['htemp', 'Modem temp', 1]] },
 	{ id: 'ctl', name: 'Controls', mirror: true, rows: [['xradio', 'Radio'], ['xpin', 'Rung pin'], ['xprof', 'Cellular profiles'], ['xtime', 'Clock'], ['xtrans', 'Bearer changes']] },
 ];
@@ -943,6 +1001,17 @@ function renderStatus2(s) {
 	setv('sover', n0(s.overwritten)); setv('serase', n0(s.eraseCycles));
 
 	setv('aact', n0(s.alerts)); setv('alat', n0(s.latched)); setv('adef', n0(s.deferred));
+	/* The count says whether anything is wrong; this says what. An installer under a unit with
+	   two rules and one alert needs the second sentence. */
+	setv('alast', s.la.age === NEVER || !s.la.dev ? 'none since boot'
+		: 'device ' + s.la.dev + ' \u00b7 rule ' + s.la.rule + ' \u00b7 ' +
+		  (RULE_SEV[s.la.sev] || s.la.sev) + ' \u00b7 ' +
+		  ((s.la.flags & 1) ? 'entered' : 'cleared') + ((s.la.flags & 4) ? ', LATCHED' : '') +
+		  ' \u00b7 ' + dur(s.la.age) + ' ago');
+	setv('arule', lastRules ? lastRules.count + ' in force, renotify ' +
+		(lastRules.renotify ? lastRules.renotify + ' s' : 'off') : '\u2014');
+	setv('awhy', s.rulesReason ? (RULES_REASON[s.rulesReason] || ('reason ' + s.rulesReason))
+		: 'none');
 
 	setv('hlink', s.linkAlive ? 'up' : 'DOWN');
 	setv('hhb', dur(s.hbAge));
@@ -1217,14 +1286,158 @@ $('b-dplwrite').onclick = async e => { e.stopPropagation(); $('b-dplwrite').disa
 	sel.innerHTML = RUNG_OPT.map((o, k) => '<option value="' + (k ? k - 1 : '') + '">' + o + '</option>').join('');
 });
 
+/* ───────────────────────── M4: the rule set (…0010) ─────────────────────────
+   The same shape as the two panels above — read the unit, edit, write, read back and compare —
+   with one difference that is worth saying out loud on screen: the read serves what is IN FORCE,
+   and a rule set is applied at the next WINDOW boundary. So a read-back straight after a write
+   shows the OLD set, and the panel says so rather than reporting a mismatch it caused itself.
+
+   The twelve-byte record packs five fields into two bytes (link_proto.h): id and field as
+   nibbles, then op, severity and the flags as 4 + 2 + 2 bits. Packing and unpacking live here,
+   once, next to each other, because a bit layout with two implementations has two to get wrong. */
+let lastRules = null;
+
+function packRules(set) {
+	const b = new ArrayBuffer(RULES_SIZE), v = new DataView(b);
+	v.setUint8(0, 1);                                  // ver
+	v.setUint8(1, set.rules.length);
+	v.setUint16(2, set.renotify || 0, true);
+	v.setUint32(4, 0, true);                           // cfg_ver: the unit writes it, never us
+	set.rules.forEach((r, i) => {
+		const at = 8 + i * 12;
+		v.setUint8(at, (r.id & 0x0f) | (r.field << 4));
+		v.setUint8(at + 1, (r.op & 0x0f) | ((r.sev & 3) << 4) | ((r.flags & 3) << 6));
+		v.setUint16(at + 2, r.dev || 0, true);
+		v.setInt32(at + 4, r.value | 0, true);
+		v.setUint16(at + 8, r.hyst || 0, true);
+		v.setUint16(at + 10, r.hold || 0, true);
+	});
+	return b;
+}
+function parseRules(dv) {
+	if (dv.byteLength < RULES_SIZE) throw new Error('the rule set is ' + dv.byteLength + ' bytes; this firmware speaks ' + RULES_SIZE);
+	const out = { ver: dv.getUint8(0), count: dv.getUint8(1), renotify: dv.getUint16(2, true),
+		      cfgVer: dv.getUint32(4, true), rules: [] };
+	for (let i = 0; i < out.count && i < RULE_MAX; i++) {
+		const at = 8 + i * 12, hdr = dv.getUint8(at), os = dv.getUint8(at + 1);
+		out.rules.push({ id: hdr & 0x0f, field: hdr >> 4, op: os & 0x0f, sev: (os >> 4) & 3,
+				 flags: (os >> 6) & 3, dev: dv.getUint16(at + 2, true),
+				 value: dv.getInt32(at + 4, true), hyst: dv.getUint16(at + 8, true),
+				 hold: dv.getUint16(at + 10, true) });
+	}
+	return out;
+}
+const fieldOf = id => RULE_FIELDS.find(f => f.id === id) || { name: 'field ' + id, unit: '', scale: 1 };
+/* A threshold is stored scaled and shown unscaled: 800 is 8.00 C and an installer types 8. The
+   scale belongs to the FIELD, so it moves when the field does — which is why the editor rescales
+   on a field change rather than leaving a temperature reading as a humidity. */
+const showVal = (v, f) => (f.scale === 1 ? String(v) : (v / f.scale).toFixed(2));
+
+function rulesFromForm() {
+	const rules = [];
+	document.querySelectorAll('#rules-body tr').forEach(tr => {
+		const g = k => tr.querySelector('[data-k="' + k + '"]');
+		const field = Number(g('field').value), f = fieldOf(field);
+		const val = parseFloat(g('value').value);
+		if (!isNaN(val) === false && g('value').value === '') return;
+		rules.push({
+			id: Number(g('id').value), field, op: Number(g('op').value),
+			sev: Number(g('sev').value),
+			flags: (g('latch').checked ? 1 : 0) | (g('renotify').checked ? 2 : 0),
+			dev: Number(g('dev').value) || 0,
+			value: Math.round((isNaN(val) ? 0 : val) * f.scale),
+			hyst: Math.round((parseFloat(g('hyst').value) || 0) *
+					 (Number(g('op').value) === 3 ? 1 : f.scale)),
+			hold: Number(g('hold').value) || 0,
+		});
+	});
+	if (rules.length > RULE_MAX) throw new Error('this firmware holds ' + RULE_MAX + ' rules');
+	return { renotify: Number($('r-renotify').value) || 0, rules };
+}
+function ruleRow(r) {
+	const f = fieldOf(r.field);
+	const sel = (k, opts, val) => '<select data-k="' + k + '">' +
+		opts.map(o => '<option value="' + o[0] + '"' + (o[0] === val ? ' selected' : '') + '>' + o[1] + '</option>').join('') + '</select>';
+	const tr = document.createElement('tr');
+	tr.innerHTML =
+		'<td><input type="number" data-k="id" min="1" max="15" style="width:4em" value="' + r.id + '"></td>' +
+		'<td><input type="number" data-k="dev" min="0" max="65535" style="width:6em" value="' + (r.dev || 0) + '"><br><small style="color:var(--muted)">0 = any</small></td>' +
+		'<td>' + sel('field', RULE_FIELDS.map(x => [x.id, x.name]), r.field) + '</td>' +
+		'<td>' + sel('op', RULE_OPS.map(x => [x.id, x.name]), r.op) + '</td>' +
+		'<td><input type="number" data-k="value" step="0.01" style="width:7em" value="' + showVal(r.value, f) + '"> <small style="color:var(--muted)">' + f.unit + '</small></td>' +
+		'<td><input type="number" data-k="hyst" step="0.01" style="width:7em" value="' + (r.op === 3 ? r.hyst : showVal(r.hyst, f)) + '"><br><small style="color:var(--muted)">' + (r.op === 3 ? 'window, s' : 'band') + '</small></td>' +
+		'<td><input type="number" data-k="hold" min="0" max="65535" style="width:6em" value="' + (r.hold || 0) + '"></td>' +
+		'<td>' + sel('sev', RULE_SEV.map((n, i) => [i, n]), r.sev) + '</td>' +
+		'<td><label><input type="checkbox" data-k="latch"' + ((r.flags & 1) ? ' checked' : '') + '> latch</label><br>' +
+		'<label><input type="checkbox" data-k="renotify"' + ((r.flags & 2) ? ' checked' : '') + '> renotify</label></td>' +
+		'<td><button class="btn sm ghost" data-k="del">Remove</button></td>';
+	tr.querySelector('[data-k="del"]').onclick = e => { e.preventDefault(); tr.remove(); };
+	return tr;
+}
+function rulesToForm(set) {
+	const tb = $('rules-body');
+	tb.innerHTML = '';
+	set.rules.forEach(r => tb.appendChild(ruleRow(r)));
+	$('r-renotify').value = set.renotify || 0;
+	$('rules-st').textContent = set.count + ' rule' + (set.count === 1 ? '' : 's') +
+		' \u00b7 v' + set.cfgVer + (set.renotify ? ' \u00b7 renotify ' + set.renotify + ' s' : '');
+}
+async function readRules(quiet) {
+	if (!chars.rul) return null;
+	try {
+		lastRules = parseRules(await gattOp(() => chars.rul.readValue(), 'rules'));
+		rulesToForm(lastRules);
+		if (!quiet) say('rule set read from the unit: ' + lastRules.count + ' in force');
+		return lastRules;
+	} catch (e) { say('could not read the rule set: ' + explainWriteError(e), 'bad'); return null; }
+}
+async function writeRules() {
+	const note = $('n-rulesnote');
+	let buf;
+	try { buf = packRules(rulesFromForm()); }
+	catch (e) { note.innerHTML = '<p class="note stop"><b>Not written.</b> ' + e.message + '</p>'; return false; }
+	note.innerHTML = '<div class="bytes">writing ' + new Uint8Array(buf)[1] + ' rule(s), ' + RULES_SIZE + ' B</div>';
+	try {
+		await gattOp(() => (chars.rul.writeValueWithResponse ? chars.rul.writeValueWithResponse(buf) : chars.rul.writeValue(buf)), 'rules');
+	} catch (e) {
+		/* Two reasons, and the panel prints both: cfg_reason says the WRITE was refused,
+		   rules_reason says which clause of which rule did it. */
+		const s2 = chars.sta2 ? await readStatus2() : null;
+		const why = s2 && s2.rulesReason ? RULES_REASON[s2.rulesReason] || ('reason ' + s2.rulesReason)
+			: await refusalWords(explainWriteError(e));
+		say('rule set refused: ' + why, 'bad');
+		note.innerHTML += '<p class="note stop"><b>Refused: ' + why + '</b> \u2014 this is the unit protecting itself, not a fault. Nothing changed on it.</p>';
+		return false;
+	}
+	const back = parseRules(await gattOp(() => chars.rul.readValue(), 'rules read-back'));
+	lastRules = back;
+	rulesToForm(back);
+	say('rule set written; the unit holds ' + back.count + ' rule(s)', 'good');
+	note.innerHTML += '<p class="note go"><b>Written.</b> A rule set is applied at the next <b>window boundary</b> (SPEC \u00a709), so the read-back above is what is IN FORCE and may still be the previous set for up to one window. It is on test for three boots like any other configuration.</p>';
+	if (chars.sta2) setTimeout(readStatus2, 300);
+	return true;
+}
+
 /* Live only where the unit exposes them. Hidden, not greyed: a grid of dashes reads as a broken
    unit rather than an older one, which is the rule the status panel already follows. */
 function showCfgPanels() {
 	$('p-net').hidden = !chars.net;
 	$('p-dpl').hidden = !chars.dpl;
+	$('p-rules').hidden = !chars.rul;
 	if (chars.net) readNet(true);
 	if (chars.dpl) readDpl(true);
+	if (chars.rul) readRules(true);
 }
+$('b-ruleswrite').onclick = async e => { e.stopPropagation(); $('b-ruleswrite').disabled = true; await writeRules(); $('b-ruleswrite').disabled = false; };
+$('b-rulesread').onclick = e => { e.stopPropagation(); readRules(false); };
+$('b-ruleadd').onclick = e => {
+	e.stopPropagation();
+	const used = [...document.querySelectorAll('#rules-body [data-k="id"]')].map(i => Number(i.value));
+	let id = 1;
+	while (used.indexOf(id) >= 0 && id < 15) { id++; }
+	$('rules-body').appendChild(ruleRow({ id, dev: 0, field: 1, op: 0, sev: 2, flags: 0,
+					      value: 800, hyst: 50, hold: 0 }));
+};
 
 /* ───────────────────────── connect ───────────────────────── */
 $('b-connect').onclick = async () => {
@@ -1460,8 +1673,8 @@ const PARAMS = [
 	{ id: 'forcerung', cap: 'cmd3', name: 'Pin the bearer rung', kind: 'cmdsel', def: 'clear the pin', opts: ['clear the pin', 'LTE-M', 'NB-IoT', 'satellite'], danger: true, note: 'command 6 — forwarded to the cellular half. A pin on satellite empties a monthly allowance overnight: clear it before you leave' },
 	{ id: 'statusnow', cap: 'cmd3', name: 'Run a cycle now', kind: 'action', note: 'command 7 — forwarded: the cellular half stops sleeping and attempts an uplink now, so the installer sees a result instead of waiting 15 minutes' },
 	{ id: 'window', cap: 'cmd3', name: 'Commissioning window', kind: 'cmdsel', def: 'open', opts: ['open', 'close'], note: 'command 8 — the BLE half\'s own: advertise connectable, or stop' },
-	{ id: 'clearlatch', cap: 'cmd3', name: 'Clear a latched alert', kind: 'cmdnums', args: [['latchdev', 'device', 0, 65535], ['latchrule', 'rule', 0, 255]], note: 'command 9 — accepted by this firmware and not acted on until M4' },
-	{ id: 'republish', cap: 'cmd3', name: 'Republish the device table', kind: 'action', note: 'command 10 — accepted by this firmware and not acted on until M4' },
+	{ id: 'clearlatch', cap: 'cmd3', name: 'Clear a latched alert', kind: 'cmdnums', args: [['latchdev', 'device', 0, 65535], ['latchrule', 'rule', 0, 255]], note: 'command 9 — the rule engine clears the latch and sends the exit that was held back. Device 0 means every device, rule 0 means every rule' },
+	{ id: 'republish', cap: 'cmd3', name: 'Republish the device table', kind: 'action', note: 'command 10 — every row of the short-id table is sent to the cellular half again, and published as a device attribute on the next terrestrial window' },
 ];
 const CMD_OF = { identify: CMD.IDENTIFY, testup: CMD.TEST_UPLINK, freset: CMD.FACTORY_RESET, reboot: CMD.REBOOT,
 	forcerung: CMD.FORCE_RUNG, statusnow: CMD.STATUS_NOW, window: CMD.WINDOW, clearlatch: CMD.CLEAR_LATCH, republish: CMD.REPUBLISH_TABLE };
@@ -1492,8 +1705,8 @@ async function sendCommand(id) {
 			forcerung: 'rung pin sent: ' + (paramValues().forcerung ?? 'clear the pin') + ' — forwarded to the cellular half',
 			statusnow: 'cycle requested — the cellular half stops sleeping; watch the Uplink group',
 			window: 'commissioning window ' + (paramValues().window ?? 'open'),
-			clearlatch: 'clear-latch sent — this firmware accepts it and does nothing until M4',
-			republish: 'republish sent — this firmware accepts it and does nothing until M4' }[id] || (id + ' sent'),
+			clearlatch: 'clear-latch sent — watch the Alerts group: a latch that is cleared while the condition has already gone sends its exit now',
+			republish: 'republish sent — the table goes to the cellular half now and to the platform at the next terrestrial window' }[id] || (id + ' sent'),
 			(id === 'freset' || id === 'forcerung') ? 'warn' : 'good');
 		if (id === 'freset') { written.pos = null; written.label = null; written.ident = null; written.psk = null; }
 		if (chars.sta2 && id !== 'freset' && id !== 'reboot') setTimeout(readStatus2, 300);
@@ -1557,8 +1770,9 @@ $('b-advspec').onclick = e => {
 		'ui  ' + C.ui + '  write 2 B  led_brightness_pct u8 (5-100), buzzer_enabled u8 (0/1)',
 
 		'cmd ' + C.cmd + '  write 1 B  1 commission (shipped), 2 test uplink, 3 reboot, 4 factory reset (requires a second write of 0xA5 within 5 s), 5 identify (both LEDs white x3, two buzzer ticks)',
-		'cmd ' + C.cmd + '  write 4 B  byte 0 command, bytes 1-3 args (M1): 6 force_rung(rung, 0xFF clears) and 7 status_now are forwarded to the cellular half as FRAME_CMD 0x18; 8 window(0 close / 1 open); 9 clear_latch(device u16, rule u8) and 10 republish_table are accepted and not acted on until M4',
-		'sta2 ' + C.sta2 + '  read 131 B  struct status2 VERSION 2: ver u8, mirror_age_s u16 (0xFFFF never), struct status_mirror (60 B, FRAME_STATUS_MIRROR 0x17, ver 2 - it gained cfg_ver u32, ladder u8[3] and plmn_mode u8), then this chip\'s counters, then cfg_ver u32, cfg_flags u8 (bit0 on test, bit1 rolled back) and cfg_reason u8. Every offset from 55 on moved with the mirror; check ver. Offsets in the tool\'s S2/M tables.', '',
+		'cmd ' + C.cmd + '  write 4 B  byte 0 command, bytes 1-3 args (M1): 6 force_rung(rung, 0xFF clears) and 7 status_now are forwarded to the cellular half as FRAME_CMD 0x18; 8 window(0 close / 1 open); 9 clear_latch(device u16, rule u8, 0 = all) and 10 republish_table are acted on by the BLE half (M4)',
+		'sta2 ' + C.sta2 + '  read 140 B  struct status2 VERSION 3: ver u8, mirror_age_s u16 (0xFFFF never), struct status_mirror (60 B, FRAME_STATUS_MIRROR 0x17, ver 2 - it gained cfg_ver u32, ladder u8[3] and plmn_mode u8), then this chip\'s counters, then cfg_ver u32, cfg_flags u8 (bit0 on test, bit1 rolled back) and cfg_reason u8. M4 APPENDED rules_reason u8 and the last alert (dev u16, rule u8, sev u8, flags u8, pad, age_s u16), so every version-2 offset is unchanged; check ver anyway. Offsets in the tool\'s S2/M tables.',
+		'rul ' + C.rul + '  rw 200 B  struct link_rules: ver u8, count u8, renotify_s u16, cfg_ver u32, then 16 x struct rule_def. A rule is TWELVE bytes: hdr (id:4 | field:4), opsev (op:4 | sev:2 | flags:2), dev u16 (0 = any), threshold i32 scaled per field, hysteresis u16 (the window in SECONDS for rate>), hold_s u16. The read serves what is IN FORCE; a write is applied at the next window boundary.', '',
 		'All writes need an authenticated link (BT_GATT_PERM_WRITE_AUTHEN) and the peripheral must call bt_conn_set_security(conn, BT_SECURITY_L4) on connect — Web Bluetooth cannot initiate pairing.',
 		'Every parameter is readable back through sta (extend status_wire) so the tool can compare what it wrote with what the unit holds.', '',
 		'Generated by the commissioner tool, ' + iso()].join('\n');
