@@ -759,7 +759,7 @@ const REFUSAL = {                              // mirrors enum prov_error in pro
    1–5 are written as a single byte, as they always were; 6–10 carry three argument bytes after
    the command. 6 and 7 are the two the BLE half forwards to the cellular half. */
 const CMD = { COMMISSION: 1, TEST_UPLINK: 2, REBOOT: 3, FACTORY_RESET: 4, IDENTIFY: 5,
-	FORCE_RUNG: 6, STATUS_NOW: 7, WINDOW: 8, CLEAR_LATCH: 9, REPUBLISH_TABLE: 10 };
+	FORCE_RUNG: 6, STATUS_NOW: 7, WINDOW: 8, CLEAR_LATCH: 9, REPUBLISH_TABLE: 10, SELFTEST: 14 };
 
 /* ───────────────────────── small utilities ───────────────────────── */
 const $ = id => document.getElementById(id);
@@ -2518,9 +2518,10 @@ const PARAMS = [
 	{ id: 'window', cap: 'cmd3', name: 'Commissioning window', kind: 'cmdsel', def: 'open', opts: ['open', 'close'], note: 'command 8 — the BLE half\'s own: advertise connectable, or stop' },
 	{ id: 'clearlatch', cap: 'cmd3', name: 'Clear a latched alert', kind: 'cmdnums', args: [['latchdev', 'device', 0, 65535], ['latchrule', 'rule', 0, 255]], note: 'command 9 — the rule engine clears the latch and sends the exit that was held back. Device 0 means every device, rule 0 means every rule' },
 	{ id: 'republish', cap: 'cmd3', name: 'Republish the device table', kind: 'action', note: 'command 10 — every row of the short-id table is sent to the cellular half again, and published as a device attribute on the next terrestrial window' },
+	{ id: 'selftest', cap: 'cmd3', name: 'Run the factory self-test', kind: 'action', note: 'command 14 — an UNCOMMISSIONED unit only (a commissioned one refuses). The cellular half proves the state, then both LEDs cycle red, green, blue, amber, white and the unit chirps once; the label (address, passkey, firmware) and the SIM facts appear in the Self-test panel. The same test a power-on with DFU1 held runs' },
 ];
 const CMD_OF = { identify: CMD.IDENTIFY, testup: CMD.TEST_UPLINK, freset: CMD.FACTORY_RESET, reboot: CMD.REBOOT,
-	forcerung: CMD.FORCE_RUNG, statusnow: CMD.STATUS_NOW, window: CMD.WINDOW, clearlatch: CMD.CLEAR_LATCH, republish: CMD.REPUBLISH_TABLE };
+	forcerung: CMD.FORCE_RUNG, statusnow: CMD.STATUS_NOW, window: CMD.WINDOW, clearlatch: CMD.CLEAR_LATCH, republish: CMD.REPUBLISH_TABLE, selftest: CMD.SELFTEST };
 // Firmware that has the ui characteristic (12 Sep 2026) answers commands 3, 4 and 5; 2 is still a
 // proposal. 6–10 arrived with the status mirror, so the mirror characteristic is what proves them.
 const cmdLive = id => CMD_OF[id] >= CMD.FORCE_RUNG ? !!caps.sta2 : (!!caps.ui && id !== 'testup');
@@ -2533,6 +2534,7 @@ const CMD_ARGS = {
 	window: () => [(paramValues().window ?? 'open') === 'open' ? 1 : 0, 0, 0],
 	clearlatch: () => { const d = Number(paramValues().latchdev ?? 0) & 0xffff; return [d & 0xff, d >> 8, Number(paramValues().latchrule ?? 0) & 0xff]; },
 	republish: () => [0, 0, 0],
+	selftest: () => [0, 0, 0],
 };
 async function sendCommand(id) {
 	const code = CMD_OF[id];
@@ -2549,7 +2551,8 @@ async function sendCommand(id) {
 			statusnow: 'cycle requested — the cellular half stops sleeping; watch the Uplink group',
 			window: 'commissioning window ' + (paramValues().window ?? 'open'),
 			clearlatch: 'clear-latch sent — watch the Alerts group: a latch that is cleared while the condition has already gone sends its exit now',
-			republish: 'republish sent — the table goes to the cellular half now and to the platform at the next terrestrial window' }[id] || (id + ' sent'),
+			republish: 'republish sent — the table goes to the cellular half now and to the platform at the next terrestrial window',
+			selftest: 'self-test requested — the cellular half proves the unit is uncommissioned, then both LEDs cycle and it chirps once; read the Self-test panel after' }[id] || (id + ' sent'),
 			(id === 'freset' || id === 'forcerung') ? 'warn' : 'good');
 		if (id === 'freset') { written.pos = null; written.label = null; written.ident = null; written.psk = null; }
 		if (chars.sta2 && id !== 'freset' && id !== 'reboot') setTimeout(readStatus2, 300);
