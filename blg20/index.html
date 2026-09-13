@@ -483,6 +483,51 @@
 	</div>
 </section>
 
+<!-- ── M7 WP3: the access list, the expected devices and the quarantine (SPEC 05) ─────────── -->
+<section class="panel" id="p-acl" hidden>
+	<div class="hd" role="button" tabindex="0" aria-expanded="false"><span class="tw">▸</span><h2>Access</h2><span class="st" id="acl-st">—</span></div>
+	<div class="bd">
+		<p class="note">What this gateway will and will not <b>ingest</b>. Rules are evaluated <b>in the order below, first match wins</b>; anything no rule matches hits the <b>terminal rule</b>. Only an <b>admitted</b> advertisement gets a short id, a row in the device table, a digest and a record in the store — everything else is counted and forgotten, counted and kept out, or held in the quarantine for you to look at.</p>
+		<p class="note warn"><b>A unit with no list here ingests nothing.</b> An <i>uncommissioned</i> unit quarantines what it hears, so you can see the site before you write a list; a <i>commissioned</i> one drops it. That is deliberate: on a metered — or satellite — link, auto-admission is a bill somebody else writes for you. If the store has stopped growing, read <b>Status → Access → Terminal rule</b> before you suspect the radio.</p>
+
+		<h3>The terminal rule, and the defaults</h3>
+		<div class="grid">
+			<div class="field"><label for="ac-term">Anything no rule matched</label><select id="ac-term"><option value="1">drop it</option><option value="2">count it</option><option value="3">quarantine it</option></select><span class="hint">drop is the default; quarantine is what makes an allow-list usable on a site nobody has surveyed</span></div>
+			<div class="field"><label for="ac-rate">Default rate ceiling, per minute</label><input type="number" id="ac-rate" class="mono" min="0" max="65535" value="0"><span class="hint">0 = no ceiling. A rule may name its own; excess is COUNTED, never queued</span></div>
+			<div class="field"><label for="ac-dedupe">Default dedupe window, s</label><input type="number" id="ac-dedupe" class="mono" min="0" max="65535" value="0"><span class="hint">0 = off. The same payload again inside the window is counted, not stored</span></div>
+		</div>
+
+		<h3 style="margin-top:18px">The rules, in order</h3>
+		<div class="scroll">
+			<table class="params" id="acl-tbl">
+				<thead><tr><th>#</th><th>action</th><th>MAC prefix</th><th>addr type</th><th>company id</th><th>UUID16</th><th>payload prefix</th><th>profile</th><th>rate/min</th><th>dedupe s</th><th></th></tr></thead>
+				<tbody id="acl-body"></tbody>
+			</table>
+		</div>
+		<p class="note">A field left blank is <b>not matched on</b>. A rule with every field blank matches everything, which is how "admit the lot" is written. The MAC prefix is 1–6 bytes, written the way it is printed — <span class="mono">AC:23:3F</span> — and the payload prefix is up to 8 bytes of hex, matched against the manufacturer or service data <i>after</i> the company id or the UUID.</p>
+		<div class="row" style="margin-top:10px"><button class="btn sm" id="b-acladd">Add a rule</button><button class="btn sm ghost" id="b-aclup">Move up</button><button class="btn sm ghost" id="b-acldown">Move down</button><button class="btn" id="b-aclwrite">Write and read back</button><button class="btn quiet" id="b-aclread">Read from the unit</button></div>
+		<div id="n-acl"></div>
+
+		<h3 style="margin-top:22px">Expected devices</h3>
+		<p class="note">The site's tags, listed before they are heard. An entry <b>admits its device on its own</b> — no rule needed — and <b>pre-assigns its short id in list order</b>, so the platform's numbering is stable from the first advert and is the same on every unit given the same list. One per line: <span class="mono">AA:BB:CC:DD:EE:01, profile, label, short id</span>; profile, label and short id may be left off.</p>
+		<p class="note warn">An address that <b>rotates</b> is refused here, with a reason. Pre-assigning a short id to an address that will not exist in fifteen minutes is exactly how a site accumulates ghost rows and presence alerts that can never clear.</p>
+		<textarea id="ac-exp" class="mono" rows="6" spellcheck="false" placeholder="C0:11:22:33:44:01, test, bay-1&#10;C0:11:22:33:44:02, env,  bay-2, 7"></textarea>
+		<div class="row" style="margin-top:10px"><button class="btn" id="b-expwrite">Write the expected list</button><button class="btn quiet" id="b-expread">Read from the unit</button><span id="exp-count" class="pill dim">—</span></div>
+		<div id="n-exp"></div>
+
+		<h3 style="margin-top:22px">Quarantine</h3>
+		<p class="note">Unknown advertisers this unit has heard and <b>not</b> ingested: up to sixteen, least recently seen evicted, with a sample of what each one last said decoded by the parsers this firmware has. Nothing here is stored, digested or numbered.</p>
+		<div class="row"><button class="btn" id="b-quarread">Read the quarantine</button><button class="btn" id="b-quarimport">Admit what I see</button><button class="btn sm ghost" id="b-quarclear">Clear it</button><span id="quar-count" class="pill dim">—</span></div>
+		<div class="scroll" style="margin-top:10px">
+			<table class="params" id="quar-tbl">
+				<thead><tr><th>address</th><th>identity</th><th>heard</th><th>RSSI</th><th>last seen</th><th>what it said</th></tr></thead>
+				<tbody id="quar-body"></tbody>
+			</table>
+		</div>
+		<div id="n-quar"></div>
+	</div>
+</section>
+
 <!-- ── M6: the log tail (SPEC 10, "the reason a site visit ends with a diagnosis") ────────── -->
 <section class="panel" id="p-log2" hidden>
 	<div class="hd" role="button" tabindex="0" aria-expanded="false"><span class="tw">▸</span><h2>Log</h2><span class="st" id="logt-st">—</span></div>
@@ -670,7 +715,73 @@ const C = {                                    // proven on hardware, 10 Sep 202
 	   NOT in status2 because status2 is polled every five seconds and these never change. */
 	log: 'a05c0011-9e5f-4b6a-9f3a-2d1c7e4b8a01',   // read 12 B header + notify 96 B lines
 	slf: 'a05c0013-9e5f-4b6a-9f3a-2d1c7e4b8a01',   // read 80 B: struct selftest_wire
+	/* M7 WP3. The access layer, three characteristics, all authenticated.
+	   `acl` and `exp` are CHUNKED both ways: an access list is 32 rules of 30 bytes plus 128
+	   expected devices of 28 — 4,552 bytes — and neither an ATT attribute value (512 B) nor a
+	   negotiated MTU (247 B) carries that in one operation. A WRITE is a stream of chunks
+	   assembled on the unit; a READ is a page selected by a cursor a preceding write moved.
+	   `qua` is the quarantine: the same paged read, plus a NOTIFY that carries a count and an
+	   epoch and never the entries — sixteen entries is 880 bytes and a moving room would put
+	   that on the link every second. */
+	acl: 'a05c0014-9e5f-4b6a-9f3a-2d1c7e4b8a01',   // rw chunked: struct acl_list_hdr + rules
+	exp: 'a05c0015-9e5f-4b6a-9f3a-2d1c7e4b8a01',   // rw chunked: struct acl_exp_hdr + entries
+	qua: 'a05c0016-9e5f-4b6a-9f3a-2d1c7e4b8a01',   // read paged + notify 8 B: struct quar_note
 };
+
+/* ── M7 WP3: the access list, byte for byte ───────────────────────────────────────────────
+   Written out rather than derived, exactly as NET_OFF and the S2 table are, and for the same
+   reason: a field inserted on the firmware side and not here has to show up as a wrong number
+   rather than as nothing at all. test_commissioner.mjs checks every one of these against
+   link_proto.h and provision.c, so a drift here is a red rig and not a bad write. */
+const ACL_MAX_RULES = 32, ACL_MAX_EXP = 128, ACL_QUAR_MAX = 16;
+const ACL_BLOB_VER = 1, ACL_CHUNK_VER = 1, ACL_VIEW_VER = 1;
+/* struct acl_chunk — 8-byte header, up to 160 bytes of data. */
+const ACL_CH = { VER: 0, OP: 1, OFFSET: 2, TOTAL: 4, N: 6, RSV: 7, DATA: 8, HDR: 8, MAX: 160 };
+const ACL_OP = { BEGIN: 0, APPEND: 1, COMMIT: 2, ABORT: 3, SEEK: 4, IMPORT: 5 };
+/* struct acl_list_hdr and struct acl_exp_hdr — the two byte streams a write carries. */
+const ACL_LH = { VER: 0, N_RULES: 1, TERMINAL: 2, RSV: 3, DEF_RATE: 4, DEF_DEDUPE: 6, SIZE: 8 };
+const ACL_EH = { VER: 0, N: 1, RSV: 2, SIZE: 4 };
+/* struct access_rule (link_proto.h). The prefix is MOST significant byte first — the way a
+   human writes a MAC and the one place in this product where an address is not the
+   controller's order. */
+const ACL_R = { ACTION: 0, MATCH: 1, ADDR_TYPE: 2, PREFIX_LEN: 3, PREFIX: 4, COMPANY: 10,
+		UUID16: 12, PAYLOAD_LEN: 14, PAYLOAD: 15, PROFILE: 23, RATE: 24, DEDUPE: 26,
+		RSV: 28, SIZE: 30 };
+/* struct access_expected. */
+const ACL_E = { ADDR: 0, ADDR_TYPE: 6, PROFILE: 7, LABEL: 8, SHORT_ID: 24, RSV: 26, SIZE: 28 };
+/* struct acl_view_hdr — what a paged READ answers, on all three characteristics. */
+const ACL_V = { VER: 0, KIND: 1, N: 2, TOTAL: 3, FIRST: 4, TERMINAL: 6, FLAGS: 7,
+		DEF_RATE: 8, DEF_DEDUPE: 10, CRC: 12, SIZE: 16 };
+const ACL_KIND = { RULES: 0, EXP: 1, QUAR: 2 };
+/* struct access_quar. */
+const ACL_Q = { ADDR: 0, ADDR_TYPE: 6, BASIS: 7, FIRST_MS: 8, LAST_MS: 12, COUNT: 16,
+		RSSI: 20, SAMPLE_LEN: 21, RSV: 22, SAMPLE: 24, SIZE: 55 };
+/* struct quar_note — the notification. */
+const QUAR_NOTE = { VER: 0, COUNT: 1, RSV: 2, EPOCH: 4, SIZE: 8 };
+/* enum access_action, enum access_profile, enum id_basis, ACC_S_*. */
+const ACC_ACTION = ['admit', 'drop', 'count', 'quarantine'];
+const ACC_PROFILE = ['any parser', 'test tag (company 0xFFFF)', 'environmental (UUID 0xFFE1)'];
+const ID_BASIS = ['public', 'static random', 'bond identity', 'ROTATING — no short id'];
+const ACC_S = { CONFIGURED: 1, COMMISSIONED: 2 };
+/* ACC_M_* — which of a rule's fields are in force. */
+const ACC_M = { ATYPE: 1, PREFIX: 2, COMPANY: 4, UUID16: 8, PAYLOAD: 16, PROFILE: 32 };
+/* enum access_reason in src/bm20-ble/src/whitelist.h. The UNIT's words: an access list that
+   admits nothing looks exactly like a dead radio, so every refusal has to be a sentence. */
+const ACCESS_REASON = [
+	'ok',
+	'an access list version this firmware does not read',
+	'more rules than this firmware holds',
+	'more expected devices than the device table has rows',
+	'a rule action outside admit / drop / count / quarantine',
+	'a match field is selected with a length out of range',
+	'a rule names a device profile this firmware cannot parse',
+	'an address type that is neither public nor random',
+	'two expected devices pin the same short id',
+	"an expected device's address rotates — it cannot be given a short id",
+	'an access-list chunk arrived out of order',
+	'an access-list chunk is larger than the list',
+	'the assembled access list does not match its checksum',
+];
 
 /* ── M2: the two configuration blocks, byte for byte ──────────────────────────────────────
    Written out rather than derived, exactly as the S2/M tables below are, and for the same
@@ -1000,7 +1111,11 @@ const S2 = {
 	/* M6, appended after the shift. */
 	DROPPED_RETENTION: 170, BOOTS: 174, WDT_RESETS: 176,
 	ST_FLAGS: 178, LOGTAIL_LINES: 179, DECOM: 180, WDT_PERIOD: 181,
-	SIZE: 182,
+	/* M7 WP3, APPENDED — every offset above is unchanged, which version 5 could not say. */
+	ACC_DROPPED_RULE: 182, ACC_COUNTED: 186, ACC_RATE: 190, ACC_DEDUPED: 194, ACC_BUDGET: 198,
+	ACC_QUAR_NOW: 202, ACC_EXP_N: 204, ACC_EXP_SEEN: 206, ACC_BUDGET_MIN: 208,
+	ACC_TERMINAL: 210, ACC_RULES: 211, ACC_REASON: 212, ACC_AT: 213, ACC_FLAGS: 214,
+	SIZE: 218,
 };
 
 /* struct logtail_hdr — what a READ of …0011 answers. Subscribing is what fetches the lines. */
@@ -1104,6 +1219,17 @@ function parseStatus2(dv) {
 		droppedRetention: g32(S2.DROPPED_RETENTION), boots: g16(S2.BOOTS),
 		wdtResets: g16(S2.WDT_RESETS), stFlags: g8(S2.ST_FLAGS),
 		logLines: g8(S2.LOGTAIL_LINES), decom: g8(S2.DECOM), wdtPeriod: g8(S2.WDT_PERIOD),
+		/* M7 WP3. `quarantined`, `scanDuty` and the health record's admission drops above
+		   were three of the four counters §13 called "rendered as measurements with no
+		   source"; they have one now. `oldestAge` is the fourth and is still zero, and the
+		   Store panel says "not measured" rather than drawing it as a number. */
+		accDroppedRule: g32(S2.ACC_DROPPED_RULE), accCounted: g32(S2.ACC_COUNTED),
+		accRate: g32(S2.ACC_RATE), accDeduped: g32(S2.ACC_DEDUPED),
+		accBudget: g32(S2.ACC_BUDGET), accQuarNow: g16(S2.ACC_QUAR_NOW),
+		accExpN: g16(S2.ACC_EXP_N), accExpSeen: g16(S2.ACC_EXP_SEEN),
+		accBudgetMin: g16(S2.ACC_BUDGET_MIN), accTerminal: g8(S2.ACC_TERMINAL),
+		accRules: g8(S2.ACC_RULES), accReason: g8(S2.ACC_REASON), accAt: g8(S2.ACC_AT),
+		accFlags: g8(S2.ACC_FLAGS),
 	};
 }
 
@@ -1117,6 +1243,12 @@ const STATUS_GROUPS = [
 	{ id: 'quota', name: 'Quota', mirror: true, rows: [['qspent', 'Spent'], ['qsat', 'Satellite'], ['qmonth', 'Sat. month'], ['qparked', 'Governor']] },
 	{ id: 'uplink', name: 'Uplink', mirror: true, rows: [['ucode', 'Last result'], ['uage', 'When'], ['ubytes', 'Datagram'], ['unext', 'Next cycle']] },
 	{ id: 'cap', name: 'Capture', rows: [['pdev', 'Devices in window'], ['pexp', 'Expected'], ['pmiss', 'Missing'], ['padm', 'Admitted'], ['pdrop', 'Dropped'], ['pquar', 'Quarantined'], ['pscan', 'Scanner']] },
+	/* M7 WP3. Its own group and not seven more rows in Capture, for the reason Sessions has
+	   one: an advertisement the ACCESS LIST refused and an advertisement a device's rate
+	   ceiling refused are different faults with different owners, and reading them in one
+	   column would suggest they are the same number. This group is the whole of §05 A2's
+	   "excess is counted and reported, never silently dropped". */
+	{ id: 'access', name: 'Access', rows: [['kterm', 'Terminal rule'], ['krules', 'Rules'], ['kexp', 'Expected devices'], ['kdrop', 'Dropped by a rule'], ['kcount', 'Counted, not stored'], ['krate', 'Over a rate ceiling'], ['kdedupe', 'Deduplicated'], ['kbudget', 'Over the budget'], ['kquar', 'Quarantined now'], ['kwhy', 'Last list refusal']] },
 	/* M5. Its own group and not four more rows in Capture: connected capture has a budget, a
 	   refusal that is not a failure (no_slot, no_budget) and four outcomes, and reading those
 	   next to "advertisements dropped" would suggest they are the same kind of number. */
@@ -1194,7 +1326,40 @@ function renderStatus2(s) {
 
 	setv('pdev', n0(s.devices)); setv('pexp', s.expected ? n0(s.expected) : 'no roster yet');
 	setv('pmiss', s.expected ? n0(s.missing) : '—'); setv('padm', n0(s.admitted));
-	setv('pdrop', n0(s.dropped)); setv('pquar', n0(s.quarantined));
+	setv('pdrop', n0(s.dropped));
+	/* M7 WP3: this one was a permanent zero until something quarantined a device. It is the
+	   count of OBSERVATIONS sent to quarantine; the Access group carries the number of
+	   distinct advertisers being held, which is the one an installer acts on. */
+	setv('pquar', n0(s.quarantined) + (s.accQuarNow ? ' · ' + s.accQuarNow + ' held' : ''));
+
+	/* ── M7 WP3: the Access group ── */
+	{
+		const configured = (s.accFlags & ACC_S.CONFIGURED) !== 0;
+		const commissioned = (s.accFlags & ACC_S.COMMISSIONED) !== 0;
+
+		/* The sentence an installer reads when the store has stopped growing, and the whole
+		   reason this row exists: "correctly filtering everything out" and "broken" look
+		   identical from outside, so the panel has to say which. */
+		setv('kterm', configured
+			? (ACC_ACTION[s.accTerminal] || ('action ' + s.accTerminal)) + ' everything unmatched'
+			: (commissioned
+				? 'NO LIST · this unit is commissioned and ingests NOTHING'
+				: 'NO LIST · uncommissioned, so it quarantines what it hears'));
+		setv('krules', configured ? n0(s.accRules) + ' of ' + ACL_MAX_RULES : 'none written');
+		setv('kexp', s.accExpN
+			? n0(s.accExpSeen) + ' of ' + n0(s.accExpN) + ' heard'
+			: 'none listed');
+		setv('kdrop', n0(s.accDroppedRule));
+		setv('kcount', n0(s.accCounted));
+		setv('krate', n0(s.accRate));
+		setv('kdedupe', n0(s.accDeduped));
+		setv('kbudget', n0(s.accBudget) + ' · ceiling ' + n0(s.accBudgetMin) + '/min');
+		setv('kquar', n0(s.accQuarNow) + ' of ' + ACL_QUAR_MAX);
+		setv('kwhy', s.accReason
+			? (ACCESS_REASON[s.accReason] || ('reason ' + s.accReason)) +
+			  (s.accAt !== 0xFF ? ' (index ' + s.accAt + ')' : '')
+			: 'none');
+	}
 	/* What the scanner ACTUALLY started with, which is not always what was asked for: the
 	   controller can refuse Coded PHY on a build whose firmware accepted it, and a site that
 	   thinks it is scanning Coded and is not has a coverage hole nobody can see. */
@@ -1223,7 +1388,12 @@ function renderStatus2(s) {
 		(s.dcredBackoff ? ' \u00b7 ' + s.dcredBackoff + ' in backoff' : ''));
 
 	setv('srec', n0(s.storeRecs)); setv('sbytes', n0(s.storeBytes) + ' B');
-	setv('soldest', s.oldestAge ? dur(s.oldestAge) : '—');
+	/* M7 WP3, audit item 24. This is the LAST of the four counters that were rendered as
+	   measurements with no source, and it is the one WP3 could not fix: the age of the oldest
+	   record needs the slot's timestamp and buf_stats carries only its sequence. So the row
+	   says NOT MEASURED rather than drawing a zero, because an installer reads a zero as
+	   "nothing is old" — which is the opposite of what an unknown means. */
+	setv('soldest', s.oldestAge ? dur(s.oldestAge) : 'not measured');
 	/* TWO drop counters, side by side, because they are different faults with different owners:
 	   "overwritten" is the uplink being behind, "retired" is the unit choosing which class to
 	   lose. An operator who cannot tell them apart cannot tell a network problem from a policy. */
@@ -1262,7 +1432,10 @@ function renderStatus2(s) {
 	setv('hwdt', s.wdtPeriod
 		? s.wdtPeriod + ' s armed \u00b7 ' + n0(s.wdtResets) + ' reset(s)'
 		: 'NOT ARMED in this build');
-	setv('hduty', s.scanDuty ? s.scanDuty + ' %' : 'not measured');
+	/* M7 WP3: this one HAS a source now — observer_scan_duty_pct(), from the window and
+	   interval the controller actually accepted. 0 means the scanner is not running, which is
+	   a fact and not an absence, so it is said that way. */
+	setv('hduty', s.scanDuty ? s.scanDuty + ' %' : (s.linkAlive || s.uptime ? 'scanner stopped' : 'not measured'));
 	setv('htemp', m.temp ? m.temp + ' °C' : 'not read');
 	setv('hself', s.stFlags ? bits(s.stFlags, SLF_F).join(', ') : 'never run');
 	setv('hdecom', s.decom ? 'YES \u2014 by ' + (DECOM_SRC[s.decom] || s.decom) : 'no');
@@ -1787,6 +1960,463 @@ function addrBytes(txt) {
 }
 const addrText = b => Array.from(b).slice().reverse().map(x => x.toString(16).padStart(2, '0').toUpperCase()).join(':');
 
+/* ═══════════════ M7 WP3: the access list, the expected devices, the quarantine ═══════════════
+ *
+ * THE CHUNK PROTOCOL, from this side. A write is BEGIN(total) · APPEND(offset, bytes)… ·
+ * COMMIT(total), all on the same characteristic, all fixed-header. The unit assembles into a
+ * static staging blob and validates the whole thing at COMMIT — so a stream that lost a chunk is
+ * refused by offset rather than accepted as a shorter list, and the reason arrives in status2's
+ * acc_reason with the rule index in acc_at. Chrome surfaces no application ATT error to a Web
+ * Bluetooth caller at all, which is why the refusal is read back and not caught.
+ *
+ * A read is SEEK(index) then readValue(): the unit serves a PAGE with the list header repeated on
+ * it, so a list short enough for one page needs one read and no stitching.
+ */
+const ACL_PAGE = { [ACL_KIND.RULES]: 7, [ACL_KIND.EXP]: 8, [ACL_KIND.QUAR]: 4 };
+
+function aclChunk(op, offset, total, data) {
+	const n = data ? data.length : 0;
+	const b = new ArrayBuffer(ACL_CH.HDR + n), d = new DataView(b), u = new Uint8Array(b);
+
+	d.setUint8(ACL_CH.VER, ACL_CHUNK_VER);
+	d.setUint8(ACL_CH.OP, op);
+	d.setUint16(ACL_CH.OFFSET, offset, true);
+	d.setUint16(ACL_CH.TOTAL, total, true);
+	d.setUint8(ACL_CH.N, n);
+	d.setUint8(ACL_CH.RSV, 0);
+	if (n) u.set(data, ACL_CH.DATA);
+	return b;
+}
+
+/* Stream one byte array to one characteristic. The chunk size is the negotiated MTU's payload,
+   capped at what the firmware's struct holds; 160 keeps the whole write inside one ATT operation
+   at the MTU a phone asks for. */
+async function aclStream(ch, bytes, what) {
+	await gattOp(() => wr(ch, aclChunk(ACL_OP.BEGIN, 0, bytes.length, null)), what + ' begin');
+	for (let at = 0; at < bytes.length; at += ACL_CH.MAX) {
+		const part = bytes.slice(at, Math.min(at + ACL_CH.MAX, bytes.length));
+
+		await gattOp(() => wr(ch, aclChunk(ACL_OP.APPEND, at, bytes.length, part)), what + ' chunk');
+	}
+	await gattOp(() => wr(ch, aclChunk(ACL_OP.COMMIT, 0, bytes.length, null)), what + ' commit');
+}
+const wr = (ch, buf) => (ch.writeValueWithResponse ? ch.writeValueWithResponse(buf) : ch.writeValue(buf));
+
+/* Read every page of one list. The header repeats on each page, so the first one is the list's
+   own header and the rest only add entries. */
+async function aclPages(ch, kind, entrySize) {
+	const out = [];
+	let hdr = null, first = 0, guard = 0;
+
+	for (;;) {
+		await gattOp(() => wr(ch, aclChunk(ACL_OP.SEEK, first, 0, null)), 'access seek');
+		const dv = await gattOp(() => ch.readValue(), 'access page');
+
+		if (dv.byteLength < ACL_V.SIZE) throw new Error('an access page is ' + dv.byteLength + ' bytes; expected at least ' + ACL_V.SIZE);
+		if (dv.getUint8(ACL_V.VER) !== ACL_VIEW_VER) throw new Error('this unit serves access view version ' + dv.getUint8(ACL_V.VER) + '; this tool speaks ' + ACL_VIEW_VER);
+		if (dv.getUint8(ACL_V.KIND) !== kind) throw new Error('asked for list ' + kind + ' and got ' + dv.getUint8(ACL_V.KIND));
+		const n = dv.getUint8(ACL_V.N), total = dv.getUint8(ACL_V.TOTAL);
+
+		if (!hdr) {
+			hdr = { total, terminal: dv.getUint8(ACL_V.TERMINAL), flags: dv.getUint8(ACL_V.FLAGS),
+				rate: dv.getUint16(ACL_V.DEF_RATE, true), dedupe: dv.getUint16(ACL_V.DEF_DEDUPE, true),
+				crc: dv.getUint32(ACL_V.CRC, true) };
+		}
+		for (let i = 0; i < n; i++) {
+			out.push(new DataView(dv.buffer, dv.byteOffset + ACL_V.SIZE + i * entrySize, entrySize));
+		}
+		first += n;
+		/* Two stops, because one is not enough: the total is reached, or a page came back
+		   empty. A unit that serves n=0 for ever with a total it cannot fill would otherwise
+		   hang the tool on a site visit. */
+		if (first >= total || n === 0 || ++guard > 64) break;
+	}
+	return { hdr: hdr || { total: 0, terminal: 1, flags: 0, rate: 0, dedupe: 0, crc: 0 }, rows: out };
+}
+
+/* ---- the rules editor ---- */
+let aclRules = [];      /* the rows on screen, in order. The order IS the semantics. */
+let aclSel = -1;
+
+function aclBlank() {
+	return { action: 0, prefix: '', atype: '', company: '', uuid16: '', payload: '', profile: '',
+		 rate: '', dedupe: '' };
+}
+function renderAclRules() {
+	const body = $('acl-body');
+
+	body.innerHTML = '';
+	aclRules.forEach((r, i) => {
+		const tr = document.createElement('tr');
+
+		if (i === aclSel) tr.style.outline = '2px solid var(--accent)';
+		tr.innerHTML =
+			'<td class="mono">' + (i + 1) + '</td>' +
+			'<td><select data-k="action">' + ACC_ACTION.map((a, k) => '<option value="' + k + '"' + (r.action === k ? ' selected' : '') + '>' + a + '</option>').join('') + '</select></td>' +
+			'<td><input class="mono" size="12" data-k="prefix" placeholder="any" value="' + r.prefix + '"></td>' +
+			'<td><select data-k="atype"><option value="">any</option><option value="0"' + (r.atype === '0' ? ' selected' : '') + '>public</option><option value="1"' + (r.atype === '1' ? ' selected' : '') + '>random</option></select></td>' +
+			'<td><input class="mono" size="6" data-k="company" placeholder="any" value="' + r.company + '"></td>' +
+			'<td><input class="mono" size="6" data-k="uuid16" placeholder="any" value="' + r.uuid16 + '"></td>' +
+			'<td><input class="mono" size="10" data-k="payload" placeholder="any" value="' + r.payload + '"></td>' +
+			'<td><select data-k="profile"><option value="">any</option>' + ACC_PROFILE.map((a, k) => '<option value="' + k + '"' + (r.profile === String(k) ? ' selected' : '') + '>' + a + '</option>').join('') + '</select></td>' +
+			'<td><input class="mono" size="5" data-k="rate" placeholder="default" value="' + r.rate + '"></td>' +
+			'<td><input class="mono" size="5" data-k="dedupe" placeholder="default" value="' + r.dedupe + '"></td>' +
+			'<td><button class="btn sm ghost" data-del="' + i + '">remove</button></td>';
+		tr.onclick = () => { aclSel = i; renderAclRules(); };
+		tr.querySelectorAll('[data-k]').forEach(el => {
+			el.onchange = () => { r[el.dataset.k] = el.value.trim(); if (el.dataset.k === 'action') r.action = Number(el.value); };
+		});
+		const del = tr.querySelector('[data-del]');
+
+		del.onclick = e => { e.stopPropagation(); aclRules.splice(i, 1); if (aclSel >= aclRules.length) aclSel = aclRules.length - 1; renderAclRules(); };
+		body.appendChild(tr);
+	});
+	$('acl-st').textContent = aclRules.length + ' rule(s) · terminal ' + (ACC_ACTION[Number($('ac-term').value)] || '?');
+}
+
+/* One row of the editor into thirty bytes. Every blank field clears its match bit, which is what
+   "not matched on" means — a company id of 0 with the bit SET is a real rule about company 0. */
+function packRule(r, u, at) {
+	let match = 0;
+
+	u[at + ACL_R.ACTION] = Number(r.action) || 0;
+	if (r.atype !== '') { match |= ACC_M.ATYPE; u[at + ACL_R.ADDR_TYPE] = Number(r.atype); }
+	if (r.prefix) {
+		const h = r.prefix.replace(/[^0-9a-fA-F]/g, '');
+
+		if (h.length < 2 || h.length > 12 || h.length % 2) throw new Error('a MAC prefix is 1 to 6 whole bytes, e.g. AC:23:3F');
+		const b = h.match(/../g).map(x => parseInt(x, 16));
+
+		match |= ACC_M.PREFIX;
+		u[at + ACL_R.PREFIX_LEN] = b.length;
+		b.forEach((x, i) => { u[at + ACL_R.PREFIX + i] = x; });   /* MOST significant first */
+	}
+	if (r.company !== '') {
+		const v = Number(r.company.startsWith('0x') || /[a-fA-F]/.test(r.company) ? '0x' + r.company.replace(/^0x/i, '') : r.company);
+
+		if (!isFinite(v) || v < 0 || v > 0xFFFF) throw new Error('a company id is 0…65535 (0xFFFF is "for testing only")');
+		match |= ACC_M.COMPANY;
+		u[at + ACL_R.COMPANY] = v & 0xFF; u[at + ACL_R.COMPANY + 1] = v >> 8;
+	}
+	if (r.uuid16 !== '') {
+		const v = Number(r.uuid16.startsWith('0x') || /[a-fA-F]/.test(r.uuid16) ? '0x' + r.uuid16.replace(/^0x/i, '') : r.uuid16);
+
+		if (!isFinite(v) || v < 0 || v > 0xFFFF) throw new Error('a 16-bit service UUID is 0…65535');
+		match |= ACC_M.UUID16;
+		u[at + ACL_R.UUID16] = v & 0xFF; u[at + ACL_R.UUID16 + 1] = v >> 8;
+	}
+	if (r.payload) {
+		const h = r.payload.replace(/[^0-9a-fA-F]/g, '');
+
+		if (h.length < 2 || h.length > 16 || h.length % 2) throw new Error('a payload prefix is 1 to 8 whole bytes of hex');
+		match |= ACC_M.PAYLOAD;
+		u[at + ACL_R.PAYLOAD_LEN] = h.length / 2;
+		h.match(/../g).forEach((x, i) => { u[at + ACL_R.PAYLOAD + i] = parseInt(x, 16); });
+	}
+	if (r.profile !== '') { match |= ACC_M.PROFILE; u[at + ACL_R.PROFILE] = Number(r.profile); }
+	const rate = Number(r.rate || 0), ded = Number(r.dedupe || 0);
+
+	if (!isFinite(rate) || rate < 0 || rate > 65535) throw new Error('a rate ceiling is 0…65535 per minute (0 = the list default)');
+	if (!isFinite(ded) || ded < 0 || ded > 65535) throw new Error('a dedupe window is 0…65535 seconds (0 = the list default)');
+	u[at + ACL_R.RATE] = rate & 0xFF; u[at + ACL_R.RATE + 1] = rate >> 8;
+	u[at + ACL_R.DEDUPE] = ded & 0xFF; u[at + ACL_R.DEDUPE + 1] = ded >> 8;
+	u[at + ACL_R.MATCH] = match;
+}
+
+function packAclList() {
+	if (aclRules.length > ACL_MAX_RULES) throw new Error('this firmware holds ' + ACL_MAX_RULES + ' rules and there are ' + aclRules.length);
+	const bytes = new Uint8Array(ACL_LH.SIZE + aclRules.length * ACL_R.SIZE);
+	const rate = Number($('ac-rate').value || 0), ded = Number($('ac-dedupe').value || 0);
+
+	bytes[ACL_LH.VER] = ACL_BLOB_VER;
+	bytes[ACL_LH.N_RULES] = aclRules.length;
+	bytes[ACL_LH.TERMINAL] = Number($('ac-term').value);
+	bytes[ACL_LH.DEF_RATE] = rate & 0xFF; bytes[ACL_LH.DEF_RATE + 1] = rate >> 8;
+	bytes[ACL_LH.DEF_DEDUPE] = ded & 0xFF; bytes[ACL_LH.DEF_DEDUPE + 1] = ded >> 8;
+	aclRules.forEach((r, i) => packRule(r, bytes, ACL_LH.SIZE + i * ACL_R.SIZE));
+	return bytes;
+}
+
+function unpackRule(dv) {
+	const m = dv.getUint8(ACL_R.MATCH), hx = (at, n) => {
+		let out = [];
+
+		for (let i = 0; i < n; i++) out.push(dv.getUint8(at + i).toString(16).padStart(2, '0').toUpperCase());
+		return out.join(':');
+	};
+	return {
+		action: dv.getUint8(ACL_R.ACTION),
+		prefix: (m & ACC_M.PREFIX) ? hx(ACL_R.PREFIX, dv.getUint8(ACL_R.PREFIX_LEN)) : '',
+		atype: (m & ACC_M.ATYPE) ? String(dv.getUint8(ACL_R.ADDR_TYPE)) : '',
+		company: (m & ACC_M.COMPANY) ? '0x' + dv.getUint16(ACL_R.COMPANY, true).toString(16).toUpperCase().padStart(4, '0') : '',
+		uuid16: (m & ACC_M.UUID16) ? '0x' + dv.getUint16(ACL_R.UUID16, true).toString(16).toUpperCase().padStart(4, '0') : '',
+		payload: (m & ACC_M.PAYLOAD) ? hx(ACL_R.PAYLOAD, dv.getUint8(ACL_R.PAYLOAD_LEN)).replace(/:/g, '') : '',
+		profile: (m & ACC_M.PROFILE) ? String(dv.getUint8(ACL_R.PROFILE)) : '',
+		rate: dv.getUint16(ACL_R.RATE, true) || '',
+		dedupe: dv.getUint16(ACL_R.DEDUPE, true) || '',
+	};
+}
+
+async function readAcl(quiet) {
+	if (!chars.acl) return null;
+	try {
+		const got = await aclPages(chars.acl, ACL_KIND.RULES, ACL_R.SIZE);
+
+		$('ac-term').value = String(got.hdr.terminal);
+		$('ac-rate').value = got.hdr.rate;
+		$('ac-dedupe').value = got.hdr.dedupe;
+		aclRules = got.rows.map(unpackRule);
+		aclSel = -1;
+		renderAclRules();
+		if (!quiet) say(aclRules.length + ' access rule(s) read from the unit, checksum ' + hex32(got.hdr.crc));
+		return got;
+	} catch (e) { say('could not read the access list: ' + explainWriteError(e), 'bad'); return null; }
+}
+const hex32 = v => '0x' + (v >>> 0).toString(16).toUpperCase().padStart(8, '0');
+
+/* The read-back is the proof, not the write. Compared rule by rule, because a list that admits
+   the wrong device is not visibly different from one that admits the right one. */
+async function writeAcl() {
+	const note = $('n-acl');
+	let bytes;
+
+	try { bytes = packAclList(); }
+	catch (e) { note.innerHTML = '<p class="note stop"><b>Not written.</b> ' + e.message + '</p>'; return false; }
+	const wanted = JSON.stringify(aclRules.map(r => [Number(r.action), String(r.prefix).toUpperCase().replace(/:/g, ''), r.atype, r.profile]));
+
+	try {
+		await aclStream(chars.acl, bytes, 'access list');
+	} catch (e) {
+		const s2 = chars.sta2 ? await readStatus2() : null;
+		const why = s2 && s2.accReason ? (ACCESS_REASON[s2.accReason] || ('reason ' + s2.accReason)) +
+				(s2.accAt !== 0xFF ? ' — at rule ' + (s2.accAt + 1) : '')
+			: await refusalWords(explainWriteError(e));
+
+		say('access list refused: ' + why, 'bad');
+		note.innerHTML = '<p class="note stop"><b>Refused: ' + why + '</b> — nothing changed on the unit. The list in force is still the one it had.</p>';
+		return false;
+	}
+	const got = await readAcl(true);
+
+	if (!got) { note.innerHTML = '<p class="note stop"><b>Written, and not confirmed.</b> The read-back failed — read the list again before you leave.</p>'; return false; }
+	const back = JSON.stringify(aclRules.map(r => [Number(r.action), String(r.prefix).toUpperCase().replace(/:/g, ''), r.atype, r.profile]));
+
+	if (back !== wanted) {
+		say('the access list read back DIFFERS from what was written', 'bad');
+		note.innerHTML = '<p class="note stop"><b>Read-back differs.</b> The unit holds a different list from the one just sent. Do not leave the site on this.</p>';
+		return false;
+	}
+	say('access list written and read back: ' + aclRules.length + ' rule(s), checksum ' + hex32(got.hdr.crc), 'good');
+	note.innerHTML = '<p class="note go"><b>Written.</b> ' + aclRules.length + ' rule(s), terminal <b>' +
+		(ACC_ACTION[got.hdr.terminal] || got.hdr.terminal) + '</b>, checksum <span class="mono">' + hex32(got.hdr.crc) +
+		'</span>. It is on test for three boots like every other configuration: if the unit fails its health gate under it, the previous list comes back.</p>';
+	if (chars.sta2) setTimeout(readStatus2, 300);
+	return true;
+}
+
+/* ---- the expected devices ---- */
+function packExpected() {
+	const lines = $('ac-exp').value.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+
+	if (lines.length > ACL_MAX_EXP) throw new Error('this firmware holds ' + ACL_MAX_EXP + ' expected devices and there are ' + lines.length);
+	const bytes = new Uint8Array(ACL_EH.SIZE + lines.length * ACL_E.SIZE);
+
+	bytes[ACL_EH.VER] = ACL_BLOB_VER;
+	bytes[ACL_EH.N] = lines.length;
+	lines.forEach((line, i) => {
+		const f = line.split(',').map(x => x.trim());
+		const h = f[0].replace(/[^0-9a-fA-F]/g, '');
+
+		if (h.length !== 12) throw new Error('line ' + (i + 1) + ': an address is twelve hex digits, e.g. C0:11:22:33:44:01');
+		const be = h.match(/../g).map(x => parseInt(x, 16));
+		const at = ACL_EH.SIZE + i * ACL_E.SIZE;
+
+		be.forEach((x, k) => { bytes[at + ACL_E.ADDR + k] = x; });   /* human order, as stored */
+		const prof = f[1] === undefined || f[1] === '' ? 0
+			: ['any', 'test', 'env'].indexOf(f[1].toLowerCase());
+
+		if (!(prof >= 0 && prof < ACC_PROFILE.length)) throw new Error('line ' + (i + 1) + ': the profile is any, test or env');
+		/*
+		 * The address TYPE is read off the address itself, and a private one is refused here
+		 * with its line number rather than at the unit with an index.
+		 *
+		 * The two most significant bits of a random address say what kind it is: 11 static,
+		 * 01 resolvable private, 00 non-resolvable private. Only a static one, or a public
+		 * address, can hold a short id — a private address is a different address in fifteen
+		 * minutes, and pre-assigning a number to one is exactly how a site accumulates ghost
+		 * rows and presence alerts that can never clear (F-M4-29). An installer fixing a
+		 * hundred-line paste needs the LINE, which is why this is not left to the unit.
+		 */
+		if ((be[0] & 0xC0) === 0xC0) {
+			bytes[at + ACL_E.ADDR_TYPE] = 1;          /* static random */
+		} else if (be[0] < 0x40) {
+			bytes[at + ACL_E.ADDR_TYPE] = 0;          /* public */
+		} else {
+			throw new Error('line ' + (i + 1) + ': ' + f[0] + ' is a PRIVATE address — it rotates, so it can never hold a short id. Bond the device, or use its static address');
+		}
+		bytes[at + ACL_E.PROFILE] = prof;
+		const label = (f[2] || '').slice(0, 15);
+
+		for (let k = 0; k < label.length; k++) bytes[at + ACL_E.LABEL + k] = label.charCodeAt(k) & 0x7F;
+		const sid = Number(f[3] || 0);
+
+		if (!isFinite(sid) || sid < 0 || sid > 65535) throw new Error('line ' + (i + 1) + ': a short id is 0…65535 (0 = assign it in list order)');
+		bytes[at + ACL_E.SHORT_ID] = sid & 0xFF; bytes[at + ACL_E.SHORT_ID + 1] = sid >> 8;
+	});
+	return bytes;
+}
+
+function expLine(dv) {
+	let label = '';
+
+	for (let k = 0; k < 16; k++) { const c = dv.getUint8(ACL_E.LABEL + k); if (!c) break; label += String.fromCharCode(c); }
+	const a = [];
+
+	for (let k = 0; k < 6; k++) a.push(dv.getUint8(ACL_E.ADDR + k).toString(16).padStart(2, '0').toUpperCase());
+	const sid = dv.getUint16(ACL_E.SHORT_ID, true);
+
+	return a.join(':') + ', ' + ['any', 'test', 'env'][dv.getUint8(ACL_E.PROFILE)] +
+		(label ? ', ' + label : (sid ? ', ' : '')) + (sid ? ', ' + sid : '');
+}
+
+async function readExpected(quiet) {
+	if (!chars.exp) return null;
+	try {
+		const got = await aclPages(chars.exp, ACL_KIND.EXP, ACL_E.SIZE);
+
+		$('ac-exp').value = got.rows.map(expLine).join('\n');
+		$('exp-count').textContent = got.hdr.total + ' of ' + ACL_MAX_EXP;
+		if (!quiet) say(got.hdr.total + ' expected device(s) read from the unit');
+		return got;
+	} catch (e) { say('could not read the expected devices: ' + explainWriteError(e), 'bad'); return null; }
+}
+
+async function writeExpected() {
+	const note = $('n-exp');
+	let bytes;
+
+	try { bytes = packExpected(); }
+	catch (e) { note.innerHTML = '<p class="note stop"><b>Not written.</b> ' + e.message + '</p>'; return false; }
+	try {
+		await aclStream(chars.exp, bytes, 'expected devices');
+	} catch (e) {
+		const s2 = chars.sta2 ? await readStatus2() : null;
+		const why = s2 && s2.accReason ? (ACCESS_REASON[s2.accReason] || ('reason ' + s2.accReason)) +
+				(s2.accAt !== 0xFF ? ' — at entry ' + (s2.accAt + 1) : '')
+			: await refusalWords(explainWriteError(e));
+
+		say('expected devices refused: ' + why, 'bad');
+		note.innerHTML = '<p class="note stop"><b>Refused: ' + why + '</b> — nothing changed on the unit.</p>';
+		return false;
+	}
+	const got = await readExpected(true);
+
+	say('expected devices written: ' + (got ? got.hdr.total : '?') + ' entry(ies)', 'good');
+	note.innerHTML = '<p class="note go"><b>Written.</b> Their short ids are assigned <b>in list order</b> and are in the device table already — check <b>Status → Access → Expected devices</b> for how many have actually been heard.</p>';
+	if (chars.sta2) setTimeout(readStatus2, 300);
+	return true;
+}
+
+/* ---- the quarantine ---- */
+/* The parsers this firmware has, so a sample is a sentence and not a hex dump. It reads the SAME
+   two frame shapes state_extract() does, and says nothing about a payload it does not know rather
+   than guessing — a decoded number that is wrong is worse than raw bytes. */
+function decodeSample(u) {
+	const out = [];
+	let at = 0;
+
+	while (at + 1 < u.length) {
+		const l = u[at], type = u[at + 1];
+
+		if (!l || at + 1 + l > u.length) break;
+		const v = u.subarray(at + 2, at + 1 + l);
+
+		if (type === 0xFF && v.length >= 2) {
+			const co = v[0] | (v[1] << 8);
+
+			if (co === 0xFFFF && v.length >= 8 && v[2] === 1) {
+				const t = ((v[4] << 8) | v[3]) << 16 >> 16;
+
+				out.push('test tag: ' + (t / 100).toFixed(2) + ' °C, ' + v[5] + ' %RH, battery ' + v[6] + ' %, door ' + (v[7] ? 'open' : 'shut'));
+			} else {
+				out.push('manufacturer data, company 0x' + co.toString(16).toUpperCase().padStart(4, '0'));
+			}
+		} else if (type === 0x16 && v.length >= 2) {
+			const uu = v[0] | (v[1] << 8);
+
+			if (uu === 0xFFE1 && v.length >= 7 && v[2] === 0xA1 && v[3] === 0x01) {
+				const t = ((v[5] << 24) >> 24) * 100 + Math.trunc(v[6] * 100 / 256);
+
+				out.push('environmental: ' + (t / 100).toFixed(2) + ' °C, battery ' + v[4] + ' %');
+			} else {
+				out.push('service data, UUID 0x' + uu.toString(16).toUpperCase().padStart(4, '0'));
+			}
+		} else if (type === 0x09 || type === 0x08) {
+			out.push('name "' + new TextDecoder().decode(v) + '"');
+		}
+		at += 1 + l;
+	}
+	return out.length ? out.join(' · ') : 'nothing this firmware parses';
+}
+
+async function readQuarantine(quiet) {
+	if (!chars.qua) return null;
+	try {
+		const got = await aclPages(chars.qua, ACL_KIND.QUAR, ACL_Q.SIZE);
+		const body = $('quar-body');
+
+		body.innerHTML = '';
+		got.rows.forEach(dv => {
+			const a = [];
+
+			for (let k = 5; k >= 0; k--) a.push(dv.getUint8(ACL_Q.ADDR + k).toString(16).padStart(2, '0').toUpperCase());
+			const basis = dv.getUint8(ACL_Q.BASIS);
+			const n = dv.getUint8(ACL_Q.SAMPLE_LEN);
+			const u = new Uint8Array(dv.buffer, dv.byteOffset + ACL_Q.SAMPLE, n);
+			const tr = document.createElement('tr');
+
+			tr.innerHTML = '<td class="mono">' + a.join(':') + '</td>' +
+				'<td>' + (basis === 3 ? '<span class="pill warn">' + ID_BASIS[3] + '</span>' : (ID_BASIS[basis] || basis)) + '</td>' +
+				'<td class="mono">' + dv.getUint32(ACL_Q.COUNT, true) + '</td>' +
+				'<td class="mono">' + dv.getInt8(ACL_Q.RSSI) + ' dBm</td>' +
+				'<td class="mono">' + Math.round(dv.getUint32(ACL_Q.LAST_MS, true) / 1000) + ' s</td>' +
+				'<td>' + decodeSample(u) + '<div class="mono" style="opacity:.55;font-size:11px">' + hex(u) + '</div></td>';
+			body.appendChild(tr);
+		});
+		$('quar-count').textContent = got.hdr.total + ' of ' + ACL_QUAR_MAX;
+		if (!quiet) say(got.hdr.total + ' quarantined advertiser(s) read');
+		return got;
+	} catch (e) { say('could not read the quarantine: ' + explainWriteError(e), 'bad'); return null; }
+}
+
+/* "Admit what I see" — one write, and the unit does the import, the validation and the commit. It
+   is deliberately NOT done by packing an expected list here: the import has to go through the same
+   validation and three-boot test as any other write, and doing it on the unit is what makes that
+   true rather than hoped for. A rotating advertiser is left behind, and the note says so. */
+async function importQuarantine() {
+	const note = $('n-quar');
+
+	try {
+		await gattOp(() => wr(chars.exp, aclChunk(ACL_OP.IMPORT, 0, 0, null)), 'admit what I see');
+	} catch (e) {
+		const s2 = chars.sta2 ? await readStatus2() : null;
+		const why = s2 && s2.accReason ? (ACCESS_REASON[s2.accReason] || ('reason ' + s2.accReason))
+			: await refusalWords(explainWriteError(e));
+
+		say('"admit what I see" refused: ' + why, 'bad');
+		note.innerHTML = '<p class="note stop"><b>Refused: ' + why + '</b> — nothing changed on the unit.</p>';
+		return false;
+	}
+	const got = await readExpected(true);
+
+	await readQuarantine(true);
+	say('the quarantine was imported into the expected list', 'good');
+	note.innerHTML = '<p class="note go"><b>Admitted.</b> The expected list now holds <b>' + (got ? got.hdr.total : '?') +
+		'</b> device(s), each with a short id assigned in list order. Any advertiser whose address <b>rotates</b> was left behind — it can never hold a stable short id, and listing it would give the site a ghost row. Read the list above before you leave.</p>';
+	if (chars.sta2) setTimeout(readStatus2, 300);
+	return true;
+}
+
 /* ---- scan options ---- */
 function packScan() {
 	const b = new ArrayBuffer(SCAN_SIZE), d = new DataView(b);
@@ -2043,6 +2673,33 @@ async function writeDcred(op) {
 
 $('b-scanwrite').onclick = async e => { e.stopPropagation(); $('b-scanwrite').disabled = true; await writeScan(); $('b-scanwrite').disabled = false; };
 $('b-scanread').onclick = e => { e.stopPropagation(); readScan(false); };
+
+/* ---- M7 WP3: the Access panel's buttons ---- */
+$('b-acladd').onclick = e => { e.stopPropagation(); aclRules.push(aclBlank()); aclSel = aclRules.length - 1; renderAclRules(); };
+/* Move up and move down are not decoration: the order IS the semantics, and an installer who has
+   to delete and re-add a rule to reorder it will get the order wrong. */
+$('b-aclup').onclick = e => {
+	e.stopPropagation();
+	if (aclSel > 0) { const r = aclRules.splice(aclSel, 1)[0]; aclRules.splice(--aclSel, 0, r); renderAclRules(); }
+};
+$('b-acldown').onclick = e => {
+	e.stopPropagation();
+	if (aclSel >= 0 && aclSel < aclRules.length - 1) { const r = aclRules.splice(aclSel, 1)[0]; aclRules.splice(++aclSel, 0, r); renderAclRules(); }
+};
+$('b-aclwrite').onclick = async e => { e.stopPropagation(); $('b-aclwrite').disabled = true; await writeAcl(); $('b-aclwrite').disabled = false; };
+$('b-aclread').onclick = e => { e.stopPropagation(); readAcl(false); };
+$('b-expwrite').onclick = async e => { e.stopPropagation(); $('b-expwrite').disabled = true; await writeExpected(); $('b-expwrite').disabled = false; };
+$('b-expread').onclick = e => { e.stopPropagation(); readExpected(false); };
+$('b-quarread').onclick = e => { e.stopPropagation(); readQuarantine(false); };
+$('b-quarimport').onclick = async e => { e.stopPropagation(); $('b-quarimport').disabled = true; await importQuarantine(); $('b-quarimport').disabled = false; };
+$('b-quarclear').onclick = async e => {
+	e.stopPropagation();
+	try {
+		await gattOp(() => wr(chars.qua, aclChunk(ACL_OP.ABORT, 0, 0, null)), 'clear the quarantine');
+		await readQuarantine(true);
+		say('quarantine cleared');
+	} catch (err) { say('could not clear the quarantine: ' + explainWriteError(err), 'bad'); }
+};
 $('b-sesswrite').onclick = async e => { e.stopPropagation(); $('b-sesswrite').disabled = true; await writeSession(0); $('b-sesswrite').disabled = false; };
 $('b-sessread').onclick = e => { e.stopPropagation(); readSession(false); };
 $('b-sessdel').onclick = async e => { e.stopPropagation(); await writeSession(1); };
@@ -2079,6 +2736,21 @@ function showCfgPanels() {
 	   which on the log and the self-test is any firmware before this milestone. */
 	$('p-log2').hidden = !chars.log;
 	$('p-slf').hidden = !chars.slf;
+	/* M7 WP3. One panel for all three characteristics, because a rule that admits nothing, an
+	   expected list nobody wrote and a quarantine full of the site are the same question seen
+	   three ways — "why is this unit not storing anything" — and an installer who has to open
+	   three panels to answer it will answer it wrong. Hidden entirely on firmware without
+	   ...0014, rather than shown as a grid of dashes: an old unit is not a broken one. */
+	$('p-acl').hidden = !chars.acl;
+	if (chars.acl && !$('acl-body').children.length) {
+		renderAclRules();
+		$('ac-term').onchange = renderAclRules;
+	}
+	if (chars.acl && !chars.exp) {
+		const n = $('n-exp');
+
+		if (n) n.innerHTML = '<p class="note warn">This unit serves an access list but no expected-device characteristic, so a roster cannot be written from here.</p>';
+	}
 	/* The decommission is on the COMMAND characteristic, which every firmware since M1 has, so
 	   the panel is shown whenever there is a unit — and the unit refuses the command if it is
 	   older than M6, which the refusal note explains. The confirmation is pre-filled from the
@@ -2095,6 +2767,11 @@ function showCfgPanels() {
 	if (chars.dpl) readDpl(true);
 	if (chars.rul) readRules(true);
 	if (chars.scn) readScan(true);
+	/* Read at connect, quietly, so the panel opens on what the unit HOLDS and not on an empty
+	   form an installer could write over the site's list by pressing the wrong button. */
+	if (chars.acl) readAcl(true);
+	if (chars.exp) readExpected(true);
+	if (chars.qua) readQuarantine(true);
 	if (chars.ses) readSession(true);
 	if (chars.slf) readSelftest(true);
 }
