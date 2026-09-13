@@ -416,6 +416,69 @@
 	</div>
 </section>
 
+<!-- ── M5: capture from connected devices (SPEC §08) ── -->
+<section class="panel" id="p-scan" hidden>
+	<div class="hd" role="button" tabindex="0" aria-expanded="false"><span class="tw">▸</span><h2>Scan options</h2><span class="st" id="scan-st">—</span></div>
+	<div class="bd">
+		<p class="note">What the gateway <b>listens</b> with. Every one of these is a <b>site</b> decision, which is why it is configuration and not a firmware build. <b>Passive</b> is the default: an active scan sends a scan request to every advertiser it hears, which gets the scan response and makes this unit visible to anybody listening. <b>Coded PHY</b> roughly doubles range at a quarter of the throughput and needs a longer window to catch a given advertiser (§23: 57.5 ms against 21.5 ms). <b>Periodic sync</b> receives a scheduled train without scanning for it at all.</p>
+		<p class="note warn">A combination this firmware cannot do is <b>refused with a reason</b>, never silently reduced. If the <i>controller</i> refuses one after the firmware accepted it, the Sessions panel's <b>Scanner</b> row says <b>reduced</b> — that is the case worth looking for, because a site that thinks it is scanning Coded and is not has a hole in it.</p>
+		<div class="grid">
+			<div class="field"><label for="sc-win">Scan window, ms</label><input type="number" id="sc-win" class="mono" min="3" max="40960" value="30"><span class="hint">0 = the build default (30 ms)</span></div>
+			<div class="field"><label for="sc-int">Scan interval, ms</label><input type="number" id="sc-int" class="mono" min="3" max="40960" value="30"><span class="hint">window = interval is 100 % duty and is what this firmware has always done</span></div>
+			<div class="field"><label for="sc-rssi">RSSI floor, dBm</label><input type="number" id="sc-rssi" class="mono" min="-127" max="0" value="0"><span class="hint">0 = no floor</span></div>
+			<div class="field"><label for="sc-phy">PHY</label><select id="sc-phy"><option value="0">1M only</option><option value="1">Coded only</option><option value="2">1M and Coded</option></select><span class="hint">Coded only switches 1M OFF — every phone and most tags advertise on 1M</span></div>
+			<div class="field"><label><input type="checkbox" id="sc-active"> Active scanning</label><span class="hint">sends a scan request per advertiser: needed only when a profile wants the scan response</span></div>
+			<div class="field"><label><input type="checkbox" id="sc-sync"> Periodic advertising sync</label><span class="hint">one train at a time; cheaper than scanning for the same data</span></div>
+		</div>
+		<div class="row" style="margin-top:12px"><button class="btn" id="b-scanwrite">Write and read back</button><button class="btn quiet" id="b-scanread">Read from the unit</button></div>
+		<div id="n-scan"></div>
+	</div>
+</section>
+
+<section class="panel" id="p-sess" hidden>
+	<div class="hd" role="button" tabindex="0" aria-expanded="false"><span class="tw">▸</span><h2>Sessions</h2><span class="st" id="sess-st">—</span></div>
+	<div class="bd">
+		<p class="note">An instrument that only speaks when connected — a cuff, a scale, a logger — is captured by a <b>session profile</b>: how to find it, how to secure it, what to read, for how long and how often. The gateway opens at most <b>CONFIG_BT_MAX_CONN − 1</b> at once and <b>never takes the commissioning link's slot</b>, so writing an ambitious profile cannot lock you out of the unit you are standing next to.</p>
+		<p class="note warn">One slot per write. A profile is 90 bytes and eight of them would not fit one read, so choose a slot, read it, edit it and write it back. <b>session_max_s</b> is a hard disconnect enforced by the gateway, not a hope about the instrument.</p>
+		<div class="grid">
+			<div class="field"><label for="se-slot">Slot</label><select id="se-slot"></select><span class="hint">eight, and the slot is what a write names</span></div>
+			<div class="field"><label for="se-id">Profile id</label><input type="number" id="se-id" class="mono" min="1" max="255" value="1"><span class="hint">1–255, unique across the slots</span></div>
+			<div class="field"><label><input type="checkbox" id="se-en" checked> Enabled</label><span class="hint">a profile can be stored and switched off</span></div>
+			<div class="field"><label for="se-match">Match on</label><select id="se-match"><option value="addr">an address</option><option value="dev">a short id</option></select></div>
+			<div class="field"><label for="se-addr">Address</label><input type="text" id="se-addr" class="mono" placeholder="AA:BB:CC:DD:EE:01"><span class="hint">the instrument's IDENTITY address — a rotating one cannot carry a profile (F-M4-29)</span></div>
+			<div class="field"><label for="se-dev">Short id</label><input type="number" id="se-dev" class="mono" min="0" max="65535" value="0"><span class="hint">from the device table</span></div>
+			<div class="field"><label for="se-trig">Trigger</label><select id="se-trig"><option value="0">when it advertises</option><option value="1">on a schedule</option><option value="2">on demand only</option></select></div>
+			<div class="field"><label for="se-poll">Poll period, s</label><input type="number" id="se-poll" class="mono" min="0" max="65535" value="3600"><span class="hint">schedule trigger only</span></div>
+			<div class="field"><label for="se-sec">Security</label><select id="se-sec"><option value="0">none</option><option value="1">encrypted</option><option value="2">bonded (authenticated)</option></select><span class="hint">bonded needs a credential below</span></div>
+			<div class="field"><label for="se-max">session_max_s</label><input type="number" id="se-max" class="mono" min="1" max="300" value="20"><span class="hint">the hard disconnect. 1–300</span></div>
+			<div class="field"><label for="se-budget">Budget, sessions/min</label><input type="number" id="se-budget" class="mono" min="1" max="65535" value="2"><span class="hint">this profile's share of the radio</span></div>
+			<div class="field"><label for="se-retry">Retries</label><input type="number" id="se-retry" class="mono" min="0" max="3" value="3"><span class="hint">on the backoff ladder below, never faster</span></div>
+			<div class="field"><label for="se-b0">Backoff ladder, s</label><input type="text" id="se-b0" class="mono" value="30, 120, 600"><span class="hint">three rungs; the last one repeats</span></div>
+			<div class="field"><label><input type="checkbox" id="se-hist"> Read stored history (RACP)</label><span class="hint">resumable: a cursor per device, so a second read yields nothing</span></div>
+		</div>
+		<div class="scroll" style="margin-top:10px">
+			<table class="params" id="sess-tbl">
+				<thead><tr><th>service</th><th>characteristic</th><th>decoder</th><th>read</th><th>subscribe</th><th>history</th><th>generic: field / offset / type / ×÷</th><th></th></tr></thead>
+				<tbody id="sess-body"></tbody>
+			</table>
+		</div>
+		<div class="row" style="margin-top:12px"><button class="btn sm" id="b-sesschradd">Add a characteristic</button><button class="btn" id="b-sesswrite">Write this slot</button><button class="btn quiet" id="b-sessread">Read this slot</button><button class="btn sm ghost" id="b-sessdel">Delete this slot</button></div>
+		<div id="n-sess"></div>
+
+		<h3 style="margin-top:18px">Device credential</h3>
+		<p class="note stop"><b>Write only.</b> This unit has no way to read a credential back — the characteristic has no read property at all — so nothing typed here can ever be recovered from the gateway. Keep it where you keep the rest of the site's keys. What the panel <i>can</i> show is the shape of the store: how many are held, how many pairings were refused, and whether a device is in backoff (Status → Sessions).</p>
+		<div class="grid">
+			<div class="field"><label for="dc-match">Applies to</label><select id="dc-match"><option value="addr">an address</option><option value="dev">a short id</option></select></div>
+			<div class="field"><label for="dc-addr">Address</label><input type="text" id="dc-addr" class="mono" placeholder="AA:BB:CC:DD:EE:01"></div>
+			<div class="field"><label for="dc-dev">Short id</label><input type="number" id="dc-dev" class="mono" min="0" max="65535" value="0"></div>
+			<div class="field"><label for="dc-method">Method</label><select id="dc-method"><option value="1">passkey (six digits)</option><option value="2">out-of-band key (16 bytes)</option><option value="3">application token</option></select></div>
+			<div class="field"><label for="dc-secret">Secret</label><input type="password" id="dc-secret" class="mono" autocomplete="off" placeholder="123456"><span class="hint">six digits, or 32 hex characters for an OOB key, or the token's bytes as hex</span></div>
+		</div>
+		<div class="row" style="margin-top:12px"><button class="btn" id="b-dcwrite">Store the credential</button><button class="btn sm ghost" id="b-dcdel">Remove it</button><button class="btn sm ghost" id="b-dcwipe">Wipe every credential</button></div>
+		<div id="n-dc"></div>
+	</div>
+</section>
+
 <section class="panel" id="p-adv">
 	<div class="hd" role="button" tabindex="0" aria-expanded="false"><span class="tw">▸</span><h2>Advanced parameters</h2><span class="st" id="adv-st">connect to see what this unit supports</span></div>
 	<div class="bd">
@@ -530,7 +593,6 @@ const C = {                                    // proven on hardware, 10 Sep 202
 	tim: 'a05c0007-9e5f-4b6a-9f3a-2d1c7e4b8a01',   // write 8 B: unix epoch ms (fixes D-1 at commissioning)
 	dty: 'a05c0009-9e5f-4b6a-9f3a-2d1c7e4b8a01',   // write 8 B: cycle_s u32, listen_s u16, batch u8, pad
 	qta: 'a05c000a-9e5f-4b6a-9f3a-2d1c7e4b8a01',   // write 12 B: ltem_cap u32, sat_cap u32, sat_month u16, derate_pct u8, pad
-	scn: 'a05c000c-9e5f-4b6a-9f3a-2d1c7e4b8a01',   // write 6 B: window_ms u32, rssi_min i8, pad
 	ui:  'a05c000d-9e5f-4b6a-9f3a-2d1c7e4b8a01',   // write 2 B: led_brightness_pct u8, buzzer_enabled u8 (PLAN-2026-09-12-leds-buttons)
 	/* M2, SHIPPED. Both read AND write, both the exact bytes the two chips exchange over the
 	   inter-chip link (struct cfg_net / struct cfg_dpl in each chip's src/link_proto.h). */
@@ -541,6 +603,14 @@ const C = {                                    // proven on hardware, 10 Sep 202
 	   twelve-byte rules. The same bytes the unit stores and the same bytes that cross the
 	   inter-chip link, exactly as net and dpl are. */
 	rul: 'a05c0010-9e5f-4b6a-9f3a-2d1c7e4b8a01',
+	/* M5. `scn` was PROPOSED here at six bytes since M2 and is live at TWELVE: the six-byte
+	   layout never existed on a unit, so growing it costs nothing and "PHY, active or passive,
+	   periodic sync" does not fit a spare byte. The two greyed rows that used to point at it in
+	   Advanced parameters are gone, for the reason F-M2-6 states: a greyed row pointing at a
+	   characteristic that now EXISTS would write the old layout to a real attribute. */
+	scn: 'a05c000c-9e5f-4b6a-9f3a-2d1c7e4b8a01',   // rw 12 B: window_ms u32, interval_ms u32, rssi_min i8, phy, flags, pad
+	ses: 'a05c0012-9e5f-4b6a-9f3a-2d1c7e4b8a01',   // rw 94 B: one session profile per write, the slot named in the header
+	dcr: 'a05c000e-9e5f-4b6a-9f3a-2d1c7e4b8a01',   // WRITE ONLY 48 B: a device credential. There is no read side and there never will be
 };
 
 /* ── M2: the two configuration blocks, byte for byte ──────────────────────────────────────
@@ -565,7 +635,14 @@ const CFG_REASON = ['ok',
 	'the endpoint, the port, the APN or the device token is malformed',
 	'a band is outside what that rung may lock to',
 	'an unknown deployment class, transport or encoding',
-	'the rule set names something this firmware cannot act on'];
+	'the rule set names something this firmware cannot act on',
+	/* M5's three. Three and not one, because "this build has no Coded PHY" is a FIRMWARE fact
+	   an installer cannot fix from a phone and "the window is longer than the interval" is a
+	   typo they can fix in five seconds. One code for both sends the wrong person to the
+	   wrong place. */
+	'this build has no Coded PHY scanner',
+	'the scan window must be 3\u201340960 ms and no longer than the interval',
+	'this build cannot synchronise to a periodic train'];
 /* enum rules_reason in rules.h. The SECOND sentence: cfg_reason says the rule set was refused,
    this says which clause of which rule did it, and only that one tells the installer what to
    change. */
@@ -584,6 +661,13 @@ const RULE_FIELDS = [
 	{ id: 4, name: 'door', unit: '0/1', scale: 1 },
 	{ id: 5, name: 'RSSI', unit: 'dBm', scale: 1 },
 	{ id: 6, name: 'presence', unit: 's', scale: 1 },
+	/* M5's four, from the connected decoders. Pressure is PASCALS on purpose and is shared by a
+	   barometer and a blood-pressure cuff's systolic, so one "pressure high" rule is legible on
+	   both and neither reading is in the other's units. 120 mmHg is 15,998 Pa. */
+	{ id: 7, name: 'pressure', unit: 'Pa', scale: 1 },
+	{ id: 8, name: 'mass', unit: 'g', scale: 1 },
+	{ id: 9, name: 'diastolic', unit: 'Pa', scale: 1 },
+	{ id: 10, name: 'pulse', unit: 'bpm', scale: 1 },
 ];
 const RULE_OPS = [
 	{ id: 0, name: '> greater than' }, { id: 1, name: '< less than' },
@@ -825,7 +909,7 @@ const M = {   // struct status_mirror, 60 B (ver 2 since M2: the last three are 
 	UP_BYTES: 38, NEXT_WIN: 40, RESETS: 42, TEMP: 43, UPTIME: 44, FW: 48,
 	CFG_VER: 52, LADDER: 56, PLMN_MODE: 59, SIZE: 60,
 };
-/* struct status2, 140 B (ver 3). EVERY offset from 55 on moved at version 2, when the embedded
+/* struct status2, 168 B (ver 4). EVERY offset from 55 on moved at version 2, when the embedded
    mirror grew by eight bytes — which is exactly why ver is checked below and not merely carried.
    Version 3 APPENDED its nine bytes, so every offset a version-2 parser knows is unchanged. */
 const S2 = {
@@ -838,7 +922,13 @@ const S2 = {
 	CFG_VER: 125, CFG_FLAGS: 129, CFG_REASON: 130,
 	/* M4 */
 	RULES_REASON: 131, LA_DEV: 132, LA_RULE: 134, LA_SEV: 135, LA_FLAGS: 136, LA_AGE: 138,
-	SIZE: 140,
+	/* M5, appended again: every offset above is unchanged, which is what a version bump is
+	   supposed to cost and is the opposite of what version 2 did. */
+	SESS_OPEN: 140, SESS_MAX: 141, SESS_OPENED: 142, SESS_NO_SLOT: 144, SESS_NO_BUDGET: 146,
+	SESS_BYTES: 148, HIST_RECS: 152, HIST_DUPES: 154, DIN_FRAMES: 156, DIN_REFUSED: 158,
+	DCRED_REFUSED: 160, DCRED_ROWS: 162, DCRED_BACKOFF: 163, SCAN_FLAGS: 164,
+	SESS_PROFILES: 165, SESS_REASON: 166,
+	SIZE: 168,
 };
 /* Names, taken from the firmware and nowhere else: bearer_state_name() and bearer_rung_name() in
    src/nrf9151-app/src/bearer.c, bearer_reason_name() beside them. */
@@ -908,6 +998,15 @@ function parseStatus2(dv) {
 		rulesReason: g8(S2.RULES_REASON),
 		la: { dev: g16(S2.LA_DEV), rule: g8(S2.LA_RULE), sev: g8(S2.LA_SEV),
 		      flags: g8(S2.LA_FLAGS), age: g16(S2.LA_AGE) },
+		/* M5. `sessOk` and its three neighbours above have existed since M1 and were always
+		   zero; they are the CAPTURE scheduler's now, which is what they were always for. */
+		sessOpen: g8(S2.SESS_OPEN), sessMax: g8(S2.SESS_MAX), sessOpened: g16(S2.SESS_OPENED),
+		sessNoSlot: g16(S2.SESS_NO_SLOT), sessNoBudget: g16(S2.SESS_NO_BUDGET),
+		sessBytes: g32(S2.SESS_BYTES), histRecs: g16(S2.HIST_RECS), histDupes: g16(S2.HIST_DUPES),
+		dinFrames: g16(S2.DIN_FRAMES), dinRefused: g16(S2.DIN_REFUSED),
+		dcredRefused: g16(S2.DCRED_REFUSED), dcredRows: g8(S2.DCRED_ROWS),
+		dcredBackoff: g8(S2.DCRED_BACKOFF), scanFlags: g8(S2.SCAN_FLAGS),
+		sessProfiles: g8(S2.SESS_PROFILES), sessReason: g8(S2.SESS_REASON),
 	};
 }
 
@@ -920,7 +1019,11 @@ const STATUS_GROUPS = [
 	{ id: 'net', name: 'Network', mirror: true, rows: [['bstate', 'Bearer'], ['brung', 'Rung'], ['bladder', 'Effective ladder'], ['bpmode', 'PLMN policy'], ['bplmn', 'Network'], ['bcell', 'Band / cell'], ['bsig', 'Signal'], ['breason', 'Last reason'], ['battach', 'Last attach'], ['bflags', 'Flags']] },
 	{ id: 'quota', name: 'Quota', mirror: true, rows: [['qspent', 'Spent'], ['qsat', 'Satellite'], ['qmonth', 'Sat. month'], ['qparked', 'Governor']] },
 	{ id: 'uplink', name: 'Uplink', mirror: true, rows: [['ucode', 'Last result'], ['uage', 'When'], ['ubytes', 'Datagram'], ['unext', 'Next cycle']] },
-	{ id: 'cap', name: 'Capture', rows: [['pdev', 'Devices in window'], ['pexp', 'Expected'], ['pmiss', 'Missing'], ['padm', 'Admitted'], ['pdrop', 'Dropped'], ['pquar', 'Quarantined']] },
+	{ id: 'cap', name: 'Capture', rows: [['pdev', 'Devices in window'], ['pexp', 'Expected'], ['pmiss', 'Missing'], ['padm', 'Admitted'], ['pdrop', 'Dropped'], ['pquar', 'Quarantined'], ['pscan', 'Scanner']] },
+	/* M5. Its own group and not four more rows in Capture: connected capture has a budget, a
+	   refusal that is not a failure (no_slot, no_budget) and four outcomes, and reading those
+	   next to "advertisements dropped" would suggest they are the same kind of number. */
+	{ id: 'sess', name: 'Sessions', rows: [['zopen', 'Open now'], ['zopened', 'Opened'], ['zok', 'Complete'], ['zpart', 'Partial'], ['zref', 'Refused'], ['zto', 'Timed out'], ['zwait', 'Waiting'], ['zbytes', 'Read'], ['zhist', 'History'], ['zprof', 'Profiles'], ['zwhy', 'Last profile refusal'], ['zdin', 'Data-in'], ['zcred', 'Credentials']] },
 	{ id: 'store', name: 'Store', rows: [['srec', 'Records held'], ['sbytes', 'Bytes'], ['soldest', 'Oldest'], ['sover', 'Overwritten'], ['serase', 'Erase cycles']] },
 	{ id: 'alerts', name: 'Alerts', rows: [['aact', 'Active'], ['alat', 'Latched'], ['adef', 'Deferred'], ['alast', 'Last alert'], ['arule', 'Rules'], ['awhy', 'Last rule refusal']] },
 	{ id: 'health', name: 'Health', rows: [['hlink', 'Inter-chip link'], ['hhb', 'Last heartbeat'], ['hmir', 'Mirror age'], ['hup', 'BLE uptime'], ['hup91', 'Cellular uptime', 1], ['hreset', 'BLE reset cause'], ['hreset91', 'Cellular reset cause', 1], ['hduty', 'Scan duty'], ['htemp', 'Modem temp', 1]] },
@@ -995,6 +1098,32 @@ function renderStatus2(s) {
 	setv('pdev', n0(s.devices)); setv('pexp', s.expected ? n0(s.expected) : 'no roster yet');
 	setv('pmiss', s.expected ? n0(s.missing) : '—'); setv('padm', n0(s.admitted));
 	setv('pdrop', n0(s.dropped)); setv('pquar', n0(s.quarantined));
+	/* What the scanner ACTUALLY started with, which is not always what was asked for: the
+	   controller can refuse Coded PHY on a build whose firmware accepted it, and a site that
+	   thinks it is scanning Coded and is not has a coverage hole nobody can see. */
+	setv('pscan', scanWords(s.scanFlags));
+
+	setv('zopen', s.sessOpen + ' of ' + s.sessMax);
+	setv('zopened', n0(s.sessOpened));
+	setv('zok', n0(s.sessOk)); setv('zpart', n0(s.sessPartial));
+	setv('zref', n0(s.sessRefused)); setv('zto', n0(s.sessTimeout));
+	/* Two REFUSALS that are not failures: the scheduler said no because the slots or the
+	   budget were spent, and the device is still queued. A panel that showed them beside
+	   "refused" would have an installer chasing an instrument that is perfectly well. */
+	setv('zwait', s.sessNoSlot || s.sessNoBudget
+		? n0(s.sessNoSlot) + ' no slot \u00b7 ' + n0(s.sessNoBudget) + ' no budget'
+		: 'none turned away');
+	setv('zbytes', n0(s.sessBytes) + ' B');
+	setv('zhist', s.histRecs || s.histDupes
+		? n0(s.histRecs) + ' record(s), ' + n0(s.histDupes) + ' already held'
+		: 'no history profile');
+	setv('zprof', s.sessProfiles + ' stored');
+	setv('zwhy', s.sessReason ? (SESS_REASON[s.sessReason] || ('reason ' + s.sessReason)) : 'none');
+	setv('zdin', n0(s.dinFrames) + ' accepted, ' + n0(s.dinRefused) + ' refused');
+	/* The credential store's SHAPE, and nothing else. There is no row here that could ever
+	   carry a secret, because there is no read side to carry one. */
+	setv('zcred', s.dcredRows + ' stored \u00b7 ' + n0(s.dcredRefused) + ' pairing(s) refused' +
+		(s.dcredBackoff ? ' \u00b7 ' + s.dcredBackoff + ' in backoff' : ''));
 
 	setv('srec', n0(s.storeRecs)); setv('sbytes', n0(s.storeBytes) + ' B');
 	setv('soldest', s.oldestAge ? dur(s.oldestAge) : '—');
@@ -1418,15 +1547,362 @@ async function writeRules() {
 	return true;
 }
 
+/* ───────────────────────── M5: scan options, sessions, credentials ─────────────────────────
+   Three surfaces, one rule: the layouts here are the C structs in src/bm20-ble/src/link_proto.h
+   and config.h, written out in the order they are declared, because a DataView is not a
+   specification and a field added on the firmware side and not here must show up as a wrong
+   number rather than as nothing at all. All three are __packed and little-endian. */
+
+const SCAN_SIZE = 12;   /* struct cfg_scan: window_ms u32, interval_ms u32, rssi_min i8, phy, flags, pad */
+const SESS_SIZE = 94;   /* struct link_session_write: ver, slot, op, rsv, then the 90-byte profile */
+const PROF_OFF = 4;
+const DCRED_SIZE = 48;  /* struct dcred_write */
+const SESS_SLOTS = 8, SESS_CHRS = 4;
+
+/* observer.h's OBS_SCAN_F_*. What the scanner ACTUALLY started with — not what was asked for. */
+function scanWords(f) {
+	if (f === undefined || f === null) return '—';
+	const w = [(f & 1) ? 'active' : 'passive', (f & 2) ? '1M + Coded' : '1M'];
+	if (f & 4) w.push('periodic sync');
+	if (f & 8) w.push('REDUCED — the controller refused what was asked for');
+	return w.join(' · ');
+}
+
+/* enum sess_reason, in order, from src/bm20-ble/src/sessions.h. Sentences, not numbers: an
+   installer holding a phone needs to know what to change. */
+const SESS_REASON = ['ok',
+	'the profile version is not one this firmware reads',
+	'no such profile slot',
+	'profile id 0, or an id another slot already holds',
+	'unknown trigger', 'unknown security level',
+	'the profile matches neither an address nor a short id',
+	'session_max_s must be 1–300 seconds',
+	'a per-minute budget of 0 is a profile that can never run',
+	'too many characteristics for one profile',
+	'a decoder this firmware does not have',
+	'that decoder does not read that characteristic',
+	'a characteristic that is neither read nor subscribed',
+	'history was asked for and no characteristic carries it',
+	'the connection interval or the supervision timeout is illegal'];
+
+/* enum session_decoder. Each one names the characteristic it reads, because the firmware REFUSES
+   a profile that points a decoder at the wrong one — better here than on a roof. */
+const DECODERS = [
+	{ id: 1, name: 'Battery level', uuid: 0x2A19, svc: 0x180F },
+	{ id: 2, name: 'ESS temperature', uuid: 0x2A6E, svc: 0x181A },
+	{ id: 3, name: 'ESS humidity', uuid: 0x2A6F, svc: 0x181A },
+	{ id: 4, name: 'ESS pressure', uuid: 0x2A6D, svc: 0x181A },
+	{ id: 5, name: 'Health thermometer', uuid: 0x2A1C, svc: 0x1809 },
+	{ id: 6, name: 'Blood pressure', uuid: 0x2A35, svc: 0x1810 },
+	{ id: 7, name: 'Weight', uuid: 0x2A9D, svc: 0x181D },
+	{ id: 8, name: 'generic {offset, type, scale}', uuid: 0, svc: 0 },
+];
+const GEN_TYPES = ['u8', 'i8', 'u16 LE', 'i16 LE', 'u32 LE', 'i32 LE', 'u16 BE', 'i16 BE'];
+
+/* Six bytes, human order to controller order. The wire is little-endian and a person reads an
+   address the other way round; doing the swap in one place is what keeps a profile from being
+   written for a device that does not exist. */
+function addrBytes(txt) {
+	const h = String(txt || '').replace(/[^0-9a-fA-F]/g, '');
+	if (h.length !== 12) throw new Error('an address is twelve hex digits, e.g. AA:BB:CC:DD:EE:01');
+	const be = h.match(/../g).map(x => parseInt(x, 16));
+	return be.slice().reverse();
+}
+const addrText = b => Array.from(b).slice().reverse().map(x => x.toString(16).padStart(2, '0').toUpperCase()).join(':');
+
+/* ---- scan options ---- */
+function packScan() {
+	const b = new ArrayBuffer(SCAN_SIZE), d = new DataView(b);
+	const win = Number($('sc-win').value) || 0, iv = Number($('sc-int').value) || 0;
+	if (iv && win && win > iv) throw new Error('the window cannot be longer than the interval');
+	d.setUint32(0, win, true);
+	d.setUint32(4, iv, true);
+	d.setInt8(8, Number($('sc-rssi').value) || 0);
+	d.setUint8(9, Number($('sc-phy').value));
+	d.setUint8(10, ($('sc-active').checked ? 1 : 0) | ($('sc-sync').checked ? 2 : 0));
+	d.setUint8(11, 0);
+	return b;
+}
+function scanToForm(dv) {
+	$('sc-win').value = dv.getUint32(0, true);
+	$('sc-int').value = dv.getUint32(4, true);
+	$('sc-rssi').value = dv.getInt8(8);
+	$('sc-phy').value = String(dv.getUint8(9));
+	$('sc-active').checked = !!(dv.getUint8(10) & 1);
+	$('sc-sync').checked = !!(dv.getUint8(10) & 2);
+	$('scan-st').textContent = ['1M only', 'Coded only', '1M and Coded'][dv.getUint8(9)] +
+		' · ' + ((dv.getUint8(10) & 1) ? 'active' : 'passive') +
+		' · ' + (dv.getUint32(0, true) || 30) + ' ms window';
+}
+async function readScan(quiet) {
+	if (!chars.scn) return null;
+	try {
+		const dv = await gattOp(() => chars.scn.readValue(), 'scan');
+		if (dv.byteLength < SCAN_SIZE) throw new Error('scan block is ' + dv.byteLength + ' bytes; expected ' + SCAN_SIZE);
+		scanToForm(dv);
+		if (!quiet) say('scan options read from the unit');
+		return dv;
+	} catch (e) { say('could not read the scan options: ' + explainWriteError(e), 'bad'); return null; }
+}
+async function writeScan() {
+	const note = $('n-scan');
+	let buf;
+	try { buf = packScan(); }
+	catch (e) { note.innerHTML = '<p class="note stop"><b>Not written.</b> ' + e.message + '</p>'; return false; }
+	try {
+		await gattOp(() => (chars.scn.writeValueWithResponse ? chars.scn.writeValueWithResponse(buf) : chars.scn.writeValue(buf)), 'scan');
+	} catch (e) {
+		const s2 = chars.sta2 ? await readStatus2() : null;
+		const why = s2 && s2.cfgReason ? (CFG_REASON[s2.cfgReason] || ('reason ' + s2.cfgReason))
+			: await refusalWords(explainWriteError(e));
+		say('scan options refused: ' + why, 'bad');
+		note.innerHTML = '<p class="note stop"><b>Refused: ' + why + '</b> — nothing changed on the unit. A combination this build cannot do is refused rather than quietly reduced.</p>';
+		return false;
+	}
+	await readScan(true);
+	say('scan options written; the scanner was restarted', 'good');
+	note.innerHTML = '<p class="note go"><b>Written.</b> The scanner restarts at once rather than at a window boundary — a window is a minute and you are standing here. Check <b>Status → Capture → Scanner</b>: it says what the scanner actually started with.</p>';
+	if (chars.sta2) setTimeout(readStatus2, 300);
+	return true;
+}
+
+/* ---- session profiles ---- */
+function sessChrRow(c) {
+	const tr = document.createElement('tr');
+	const sel = (k, opts, val) => '<select data-k="' + k + '">' +
+		opts.map(o => '<option value="' + o[0] + '"' + (o[0] === val ? ' selected' : '') + '>' + o[1] + '</option>').join('') + '</select>';
+	const hex4 = v => '0x' + v.toString(16).toUpperCase().padStart(4, '0');
+	tr.innerHTML =
+		'<td><input type="text" data-k="svc" class="mono" style="width:6em" value="' + hex4(c.svc) + '"></td>' +
+		'<td><input type="text" data-k="chr" class="mono" style="width:6em" value="' + hex4(c.chr) + '"></td>' +
+		'<td>' + sel('dec', DECODERS.map(d => [d.id, d.name]), c.dec) + '</td>' +
+		'<td><input type="checkbox" data-k="rd"' + ((c.flags & 1) ? ' checked' : '') + '></td>' +
+		'<td><input type="checkbox" data-k="sub"' + ((c.flags & 6) ? ' checked' : '') + '></td>' +
+		'<td><input type="checkbox" data-k="hist"' + ((c.flags & 8) ? ' checked' : '') + '></td>' +
+		'<td>' + sel('field', RULE_FIELDS.map(x => [x.id, x.name]), c.field) +
+		' <input type="number" data-k="off" style="width:4em" value="' + c.off + '">' +
+		sel('type', GEN_TYPES.map((n, i) => [i, n]), c.type) +
+		' <input type="number" data-k="mul" style="width:4em" value="' + c.mul + '">/' +
+		'<input type="number" data-k="div" style="width:4em" value="' + c.div + '">' +
+		'<br><small style="color:var(--muted)">used only by the generic decoder; a named one already knows its unit</small></td>' +
+		'<td><button class="btn sm ghost" data-k="del">Remove</button></td>';
+	/* Choosing a named decoder fills in the characteristic it reads, because the firmware
+	   refuses the pair when they disagree and there is no reason to make a person look it up. */
+	tr.querySelector('[data-k="dec"]').onchange = e => {
+		const d = DECODERS.find(x => x.id === Number(e.target.value));
+		if (d && d.uuid) {
+			tr.querySelector('[data-k="chr"]').value = hex4(d.uuid);
+			tr.querySelector('[data-k="svc"]').value = hex4(d.svc);
+		}
+	};
+	tr.querySelector('[data-k="del"]').onclick = e => { e.preventDefault(); tr.remove(); };
+	return tr;
+}
+function packSession(op) {
+	const b = new ArrayBuffer(SESS_SIZE), d = new DataView(b), u = new Uint8Array(b);
+	const slot = Number($('se-slot').value);
+	d.setUint8(0, 1); d.setUint8(1, slot); d.setUint8(2, op); d.setUint8(3, 0);
+	if (op !== 0) return b;                      /* delete and select carry no profile */
+	const o = PROF_OFF;
+	const byAddr = $('se-match').value === 'addr';
+	d.setUint8(o + 0, Number($('se-id').value) || 0);
+	d.setUint8(o + 1, ($('se-en').checked ? 4 : 0) | (byAddr ? 1 : 0) | ($('se-hist').checked ? 2 : 0));
+	d.setUint16(o + 2, byAddr ? 0 : (Number($('se-dev').value) || 0), true);
+	if (byAddr) u.set(addrBytes($('se-addr').value), o + 4);
+	d.setUint8(o + 10, 1);                       /* identity address, static random */
+	d.setUint8(o + 11, Number($('se-trig').value));
+	d.setUint8(o + 12, Number($('se-sec').value));
+	const rows = [...document.querySelectorAll('#sess-body tr')];
+	if (!rows.length) throw new Error('a profile has to name at least one characteristic');
+	if (rows.length > SESS_CHRS) throw new Error('this firmware holds ' + SESS_CHRS + ' characteristics per profile');
+	d.setUint8(o + 13, rows.length);
+	d.setUint16(o + 14, Number($('se-poll').value) || 0, true);
+	d.setUint16(o + 16, Number($('se-max').value) || 0, true);
+	d.setUint16(o + 18, Number($('se-budget').value) || 0, true);
+	d.setUint16(o + 20, 0, true); d.setUint16(o + 22, 0, true); d.setUint16(o + 24, 0, true);
+	d.setUint8(o + 26, Number($('se-retry').value) || 0);
+	const back = String($('se-b0').value).split(/[,\s]+/).filter(x => x !== '').map(Number);
+	for (let i = 0; i < 3; i++) d.setUint16(o + 28 + i * 2, back[i] || 0, true);
+	rows.forEach((tr, i) => {
+		const g = k => tr.querySelector('[data-k="' + k + '"]');
+		const c = o + 34 + i * 14;
+		d.setUint16(c + 0, parseInt(g('svc').value, 16) || 0, true);
+		d.setUint16(c + 2, parseInt(g('chr').value, 16) || 0, true);
+		d.setUint8(c + 4, Number(g('dec').value));
+		d.setUint8(c + 5, (g('rd').checked ? 1 : 0) | (g('sub').checked ? 2 : 0) |
+				  (g('hist').checked ? 8 : 0));
+		d.setUint8(c + 6, Number(g('field').value));
+		d.setUint8(c + 7, Number(g('off').value) || 0);
+		d.setUint8(c + 8, Number(g('type').value));
+		/* The record sequence sits where the generic value's offset says the VALUE is, minus
+		   the two bytes the sequence itself takes: the sim-tag's stored record is
+		   [seq u16][temp i16 LE], so a value at offset 2 has its sequence at offset 0. */
+		d.setUint8(c + 9, Math.max(0, (Number(g('off').value) || 0) - 2));
+		d.setInt16(c + 10, Number(g('mul').value) || 1, true);
+		d.setUint16(c + 12, Number(g('div').value) || 1, true);
+	});
+	return b;
+}
+function sessionToForm(dv) {
+	const o = PROF_OFF, u = new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength);
+	const used = dv.getUint8(2), count = dv.getUint8(3);
+	$('sess-st').textContent = count + ' profile' + (count === 1 ? '' : 's') + ' stored · slot ' +
+		dv.getUint8(1) + (used ? '' : ' is empty');
+	const tb = $('sess-body');
+	tb.innerHTML = '';
+	if (!used) { $('se-id').value = 1; return; }
+	const flags = dv.getUint8(o + 1);
+	$('se-id').value = dv.getUint8(o + 0);
+	$('se-en').checked = !!(flags & 4);
+	$('se-hist').checked = !!(flags & 2);
+	$('se-match').value = (flags & 1) ? 'addr' : 'dev';
+	$('se-dev').value = dv.getUint16(o + 2, true);
+	$('se-addr').value = addrText(u.slice(o + 4, o + 10));
+	$('se-trig').value = String(dv.getUint8(o + 11));
+	$('se-sec').value = String(dv.getUint8(o + 12));
+	$('se-poll').value = dv.getUint16(o + 14, true);
+	$('se-max').value = dv.getUint16(o + 16, true);
+	$('se-budget').value = dv.getUint16(o + 18, true);
+	$('se-retry').value = dv.getUint8(o + 26);
+	$('se-b0').value = [0, 1, 2].map(i => dv.getUint16(o + 28 + i * 2, true)).join(', ');
+	const n = dv.getUint8(o + 13);
+	for (let i = 0; i < n; i++) {
+		const c = o + 34 + i * 14;
+		tb.appendChild(sessChrRow({
+			svc: dv.getUint16(c + 0, true), chr: dv.getUint16(c + 2, true),
+			dec: dv.getUint8(c + 4), flags: dv.getUint8(c + 5), field: dv.getUint8(c + 6),
+			off: dv.getUint8(c + 7), type: dv.getUint8(c + 8),
+			mul: dv.getInt16(c + 10, true), div: dv.getUint16(c + 12, true),
+		}));
+	}
+}
+/* A read serves the slot the last WRITE selected, because Web Bluetooth cannot pass an argument
+   to a read and eight profiles would be 724 bytes. So: select, then read. */
+async function readSession(quiet) {
+	if (!chars.ses) return null;
+	try {
+		await gattOp(() => (chars.ses.writeValueWithResponse ? chars.ses.writeValueWithResponse(packSession(2)) : chars.ses.writeValue(packSession(2))), 'session select');
+		const dv = await gattOp(() => chars.ses.readValue(), 'session');
+		if (dv.byteLength < SESS_SIZE) throw new Error('session block is ' + dv.byteLength + ' bytes; expected ' + SESS_SIZE);
+		sessionToForm(dv);
+		if (!quiet) say('session profile slot ' + $('se-slot').value + ' read from the unit');
+		return dv;
+	} catch (e) { say('could not read the session profile: ' + explainWriteError(e), 'bad'); return null; }
+}
+async function writeSession(op) {
+	const note = $('n-sess');
+	let buf;
+	try { buf = packSession(op); }
+	catch (e) { note.innerHTML = '<p class="note stop"><b>Not written.</b> ' + e.message + '</p>'; return false; }
+	try {
+		await gattOp(() => (chars.ses.writeValueWithResponse ? chars.ses.writeValueWithResponse(buf) : chars.ses.writeValue(buf)), 'session');
+	} catch (e) {
+		const s2 = chars.sta2 ? await readStatus2() : null;
+		const why = s2 && s2.sessReason ? (SESS_REASON[s2.sessReason] || ('reason ' + s2.sessReason))
+			: await refusalWords(explainWriteError(e));
+		say('session profile refused: ' + why, 'bad');
+		note.innerHTML = '<p class="note stop"><b>Refused: ' + why + '</b> — nothing changed on the unit.</p>';
+		return false;
+	}
+	await readSession(true);
+	say(op === 1 ? 'session profile slot cleared' : 'session profile written', 'good');
+	note.innerHTML = '<p class="note go"><b>Written.</b> Outcomes appear in <b>Status → Sessions</b> within a few seconds: opened, complete, partial, refused, timed out, and the two that are not failures — <i>no slot</i> and <i>no budget</i>, which mean the device is still queued.</p>';
+	if (chars.sta2) setTimeout(readStatus2, 500);
+	return true;
+}
+
+/* ---- the credential ---- */
+function packDcred(op) {
+	const b = new ArrayBuffer(DCRED_SIZE), d = new DataView(b), u = new Uint8Array(b);
+	const byAddr = $('dc-match').value === 'addr';
+	const method = Number($('dc-method').value);
+	d.setUint8(0, 1); d.setUint8(1, op);
+	d.setUint16(2, byAddr ? 0 : (Number($('dc-dev').value) || 0), true);
+	if (op === 2) return b;                                     /* wipe names nothing */
+	if (byAddr) u.set(addrBytes($('dc-addr').value), 4);
+	d.setUint8(10, 1);
+	if (op === 1) return b;                                     /* delete carries no secret */
+	d.setUint8(11, method);
+	const txt = String($('dc-secret').value || '').trim();
+	if (method === 1) {
+		if (!/^\d{1,6}$/.test(txt)) throw new Error('a passkey is one to six digits');
+		/* A NUMBER and not ASCII: bt_conn_auth_passkey_entry() takes an unsigned int, and
+		   "012345" and "12345" would otherwise be two different credentials. */
+		d.setUint32(16, Number(txt), true);
+		d.setUint8(12, 4);
+	} else {
+		const h = txt.replace(/[^0-9a-fA-F]/g, '');
+		if (h.length % 2) throw new Error('the secret must be a whole number of hex bytes');
+		const by = h.length ? h.match(/../g).map(x => parseInt(x, 16)) : [];
+		if (method === 2 && by.length !== 16) throw new Error('an out-of-band key is exactly 16 bytes (32 hex characters)');
+		if (method === 3 && (by.length < 1 || by.length > 32)) throw new Error('a token is 1 to 32 bytes');
+		u.set(by, 16);
+		d.setUint8(12, by.length);
+	}
+	return b;
+}
+async function writeDcred(op) {
+	const note = $('n-dc');
+	let buf;
+	try { buf = packDcred(op); }
+	catch (e) { note.innerHTML = '<p class="note stop"><b>Not written.</b> ' + e.message + '</p>'; return false; }
+	if (op === 2 && !confirm('Wipe every device credential on this unit? Nothing can read them back, so nothing can restore them.')) { say('credential wipe cancelled'); return false; }
+	try {
+		await gattOp(() => (chars.dcr.writeValueWithResponse ? chars.dcr.writeValueWithResponse(buf) : chars.dcr.writeValue(buf)), 'dcred');
+	} catch (e) {
+		say('credential refused: ' + await refusalWords(explainWriteError(e)), 'bad');
+		note.innerHTML = '<p class="note stop"><b>Refused.</b> The reason is in <b>Status → Sessions</b>; nothing changed on the unit.</p>';
+		return false;
+	} finally {
+		/* Whatever happened, the field does not keep it: a commissioning tablet left on a
+		   bench is the most likely place a site's instrument keys leak from. */
+		$('dc-secret').value = '';
+	}
+	say(op === 0 ? 'credential stored on the unit' : op === 1 ? 'credential removed' : 'every credential wiped', 'good');
+	note.innerHTML = '<p class="note go"><b>Stored.</b> It cannot be read back — not by this page, not by any other. <b>Status → Sessions → Credentials</b> shows how many the unit holds and how many pairings have been refused, which is what you need when an instrument will not talk.</p>';
+	if (chars.sta2) setTimeout(readStatus2, 300);
+	return true;
+}
+
+$('b-scanwrite').onclick = async e => { e.stopPropagation(); $('b-scanwrite').disabled = true; await writeScan(); $('b-scanwrite').disabled = false; };
+$('b-scanread').onclick = e => { e.stopPropagation(); readScan(false); };
+$('b-sesswrite').onclick = async e => { e.stopPropagation(); $('b-sesswrite').disabled = true; await writeSession(0); $('b-sesswrite').disabled = false; };
+$('b-sessread').onclick = e => { e.stopPropagation(); readSession(false); };
+$('b-sessdel').onclick = async e => { e.stopPropagation(); await writeSession(1); };
+$('b-sesschradd').onclick = e => {
+	e.stopPropagation();
+	if (document.querySelectorAll('#sess-body tr').length >= SESS_CHRS) { say('a profile holds ' + SESS_CHRS + ' characteristics', 'warn'); return; }
+	$('sess-body').appendChild(sessChrRow({ svc: 0x180F, chr: 0x2A19, dec: 1, flags: 1, field: 1, off: 0, type: 3, mul: 1, div: 1 }));
+};
+$('b-dcwrite').onclick = async e => { e.stopPropagation(); await writeDcred(0); };
+$('b-dcdel').onclick = async e => { e.stopPropagation(); await writeDcred(1); };
+$('b-dcwipe').onclick = async e => { e.stopPropagation(); await writeDcred(2); };
+
 /* Live only where the unit exposes them. Hidden, not greyed: a grid of dashes reads as a broken
    unit rather than an older one, which is the rule the status panel already follows. */
 function showCfgPanels() {
 	$('p-net').hidden = !chars.net;
 	$('p-dpl').hidden = !chars.dpl;
 	$('p-rules').hidden = !chars.rul;
+	$('p-scan').hidden = !chars.scn;
+	/* One panel for both, because a session profile that asks for a bond and a credential that
+	   is never stored are the same failure seen twice, and an installer who writes one and not
+	   the other gets a refused pairing they cannot explain. The credential half is shown only
+	   when the unit actually exposes ...000e. */
+	$('p-sess').hidden = !chars.ses;
+	if (chars.ses && !chars.dcr) {
+		const n = $('n-dc');
+		if (n) n.innerHTML = '<p class="note warn">This unit exposes session profiles but no credential characteristic, so a <b>bonded</b> profile cannot be given a passkey from here.</p>';
+	}
+	if (!$('se-slot').options.length) {
+		for (let i = 0; i < SESS_SLOTS; i++) $('se-slot').add(new Option('slot ' + i, String(i)));
+		$('se-slot').onchange = () => readSession(false);
+	}
 	if (chars.net) readNet(true);
 	if (chars.dpl) readDpl(true);
 	if (chars.rul) readRules(true);
+	if (chars.scn) readScan(true);
+	if (chars.ses) readSession(true);
 }
 $('b-ruleswrite').onclick = async e => { e.stopPropagation(); $('b-ruleswrite').disabled = true; await writeRules(); $('b-ruleswrite').disabled = false; };
 $('b-rulesread').onclick = e => { e.stopPropagation(); readRules(false); };
@@ -1660,8 +2136,10 @@ const PARAMS = [
 	/* Host and port moved to the Deployment class panel. The device TOKEN is not in the M2 dpl
 	   block: this firmware still carries it at build time, which is the one thing about the
 	   data plane an installer still cannot set. FINDINGS-M2 F-M2-7. */
-	{ id: 'scanwin', cap: 'scn', name: 'BLE digest window, ms', kind: 'number', def: 60000, min: 5000, max: 600000, note: 'observations are summarised per window per device' },
-	{ id: 'rssimin', cap: 'scn', name: 'RSSI floor, dBm', kind: 'number', def: -100, min: -127, max: 0, note: 'weaker adverts are not counted' },
+	/* The two scan rows are GONE from here and live in the Scan options panel, because ...000c
+	   now EXISTS on the unit with a twelve-byte layout. A greyed row that points at a
+	   characteristic which has since become real would write the old six-byte layout to it,
+	   which is worse than not offering it at all - the same call F-M2-6 made about PLMN. */
 	{ id: 'ledpct', cap: 'ui', name: 'LED brightness, %', kind: 'number', def: 100, min: 0, max: 100, note: 'below 20 only the solid states are drawn (a night site); 0 is dark' },
 	{ id: 'buzzer', cap: 'ui', name: 'Buzzer', kind: 'select', def: 'on', opts: ['on', 'off'], note: 'chirps on accept / commissioned, a buzz on refuse; off for hospitals and night work' },
 	{ id: 'identify', cap: 'cmd2', name: 'Identify this unit', kind: 'action', note: 'command 5 — both LEDs white ×3 and two buzzer ticks: which unit is this, from 3 m' },
