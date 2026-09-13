@@ -391,6 +391,10 @@
 		</div>
 		<p class="note warn" style="margin-top:8px"><b>The unit never reads a token back.</b> It is this unit's data-plane credential, so the read returns that field zeroed and the read-back check skips it. Leave the box blank on any later edit and the unit keeps the token it holds.</p>
 		<div class="row" style="margin-top:12px"><button class="btn" id="b-dplwrite">Write and read back</button><button class="btn quiet" id="b-dplread">Read from the unit</button></div>
+		<!-- M6, F-M3-23: the class has a tenant-side twin and nothing else in the system warns
+		     when the two disagree. Filled by dplAdvice() from whatever the installer has picked,
+		     before they write it. -->
+		<div id="n-dpladvice"></div>
 		<div id="n-dplnote"></div>
 	</div>
 </section>
@@ -476,6 +480,49 @@
 		</div>
 		<div class="row" style="margin-top:12px"><button class="btn" id="b-dcwrite">Store the credential</button><button class="btn sm ghost" id="b-dcdel">Remove it</button><button class="btn sm ghost" id="b-dcwipe">Wipe every credential</button></div>
 		<div id="n-dc"></div>
+	</div>
+</section>
+
+<!-- ── M6: the log tail (SPEC 10, "the reason a site visit ends with a diagnosis") ────────── -->
+<section class="panel" id="p-log2" hidden>
+	<div class="hd" role="button" tabindex="0" aria-expanded="false"><span class="tw">▸</span><h2>Log</h2><span class="st" id="logt-st">—</span></div>
+	<div class="bd">
+		<p class="note">The last lines <b>both halves</b> printed, newest first. On this board LTE-RESET and BLE-RESET are the same wire, so a debugger on one chip resets the other — this is the only way to read either half's log on a live unit. Fetching asks the cellular half for its ring over the inter-chip link, which costs about 600 ms of a wire that is also carrying records, so it is rate-limited to one fetch every ten seconds.</p>
+		<div class="row"><button class="btn" id="b-logfetch">Fetch the log</button><button class="btn sm ghost" id="b-logcopy">Copy</button><span id="logt-count" class="pill dim">—</span></div>
+		<div id="n-logt"></div>
+		<div class="scroll" style="max-height:420px;margin-top:10px"><ol id="logt-lines" class="mono" style="font-size:12px;line-height:1.5"></ol></div>
+	</div>
+</section>
+
+<!-- ── M6: the factory self-test (SPEC 10, Manufacturing) ─────────────────────────────────── -->
+<section class="panel" id="p-slf" hidden>
+	<div class="hd" role="button" tabindex="0" aria-expanded="false"><span class="tw">▸</span><h2>Self-test</h2><span class="st" id="slf-st">—</span></div>
+	<div class="bd">
+		<p class="note">Entered by holding <b>DFU1 through a power-on</b> on an <b>uncommissioned</b> unit. It only reads: the next power cycle leaves no trace of it, and a commissioned unit refuses it. Everything below goes on the unit's label.</p>
+		<div class="row"><button class="btn quiet" id="b-slfread">Read the result</button></div>
+		<dl class="readout" id="slf-ro">
+			<dt>State</dt><dd id="v-slfstate" class="dim">—</dd>
+			<dt>SIM / ICCID</dt><dd id="v-slficcid" class="dim mono">—</dd>
+			<dt>IMEI</dt><dd id="v-slfimei" class="dim mono">—</dd>
+			<dt>Modem firmware</dt><dd id="v-slfmfw" class="dim mono">—</dd>
+			<dt>Firmware, both halves</dt><dd id="v-slffw" class="dim">—</dd>
+			<dt>Bluetooth address</dt><dd id="v-slfaddr" class="dim mono">—</dd>
+			<dt>Passkey</dt><dd id="v-slfpk" class="dim mono">—</dd>
+		</dl>
+		<div id="n-slf"></div>
+	</div>
+</section>
+
+<!-- ── M6: decommission (SPEC 10, Retirement) ─────────────────────────────────────────────── -->
+<section class="panel" id="p-decom" hidden>
+	<div class="hd" role="button" tabindex="0" aria-expanded="false"><span class="tw">▸</span><h2>Decommission</h2><span class="st" id="decom-st">—</span></div>
+	<div class="bd">
+		<p class="note stop"><b>This cannot be undone from here.</b> It wipes the credentials, the bonds, the device credentials, the session profiles, the configuration (both copies), the rules, the device table, the stored state and every unsent record. It <b>keeps</b> the byte odometer, the store's wear count and one audit line saying when this happened and which paired device asked for it. The unit ends uncommissioned with its window open, and reports "decommissioned" on its next terrestrial window.</p>
+		<div class="grid">
+			<div class="field"><label for="dx-confirm">Type the unit's last four address hex</label><input type="text" id="dx-confirm" class="mono" maxlength="4" placeholder="E5F6" autocomplete="off" spellcheck="false"><span class="hint" id="dx-hint">read them off the label, or off the name in the chooser</span></div>
+		</div>
+		<div class="row" style="margin-top:12px"><button class="btn danger" id="b-decom" disabled>Decommission this unit</button></div>
+		<div id="n-decom"></div>
 	</div>
 </section>
 
@@ -614,6 +661,15 @@ const C = {                                    // proven on hardware, 10 Sep 202
 	scn: 'a05c000c-9e5f-4b6a-9f3a-2d1c7e4b8a01',   // rw 12 B: window_ms u32, interval_ms u32, rssi_min i8, phy, flags, pad
 	ses: 'a05c0012-9e5f-4b6a-9f3a-2d1c7e4b8a01',   // rw 94 B: one session profile per write, the slot named in the header
 	dcr: 'a05c000e-9e5f-4b6a-9f3a-2d1c7e4b8a01',   // WRITE ONLY 48 B: a device credential. There is no read side and there never will be
+	/* M6. `log` is read + notify: the READ answers how many lines are held and how old the
+	   newest is, and SUBSCRIBING is the fetch — the lines arrive as notifications, newest
+	   first, 96 B each, ending with a zero-length line. 64 lines is ~6 kB and no ATT read
+	   serves that at any MTU, which is why the characteristic has two halves.
+	   `slf` is the factory self-test's result, read only: the ICCID, the IMEI, the modem
+	   firmware, both application versions, the address and the passkey for the label. It is
+	   NOT in status2 because status2 is polled every five seconds and these never change. */
+	log: 'a05c0011-9e5f-4b6a-9f3a-2d1c7e4b8a01',   // read 12 B header + notify 96 B lines
+	slf: 'a05c0013-9e5f-4b6a-9f3a-2d1c7e4b8a01',   // read 80 B: struct selftest_wire
 };
 
 /* ── M2: the two configuration blocks, byte for byte ──────────────────────────────────────
@@ -905,34 +961,65 @@ async function readStatus(quiet) {
    src/bm20-ble/src/provision.c), so a field inserted on the firmware side and not here shows up
    as a wrong number rather than as nothing at all. Both structs are __packed and little-endian,
    both are versioned by a leading u8, and the mirror sits inside status2 at offset 3. */
-const M = {   // struct status_mirror, 60 B (ver 2 since M2: the last three are new)
+const M = {   // struct status_mirror, 62 B (ver 3 since M6: alerts_deferred is the new one)
 	VER: 0, BEARER_STATE: 1, RUNG: 2, FLAGS: 3, PLMN: 4, BAND: 8, RSRP: 9, SNR: 10, IMG: 11,
 	CELLID: 12, QUOTA_SPENT: 16, QUOTA_CAP: 20, SAT_SPENT: 24, SAT_CAP: 26, SAT_MONTH: 28,
 	LAST_ATTACH: 30, TRANSITIONS: 32, REASON: 33, UP_CODE: 34, RESET: 35, UP_AGE: 36,
 	UP_BYTES: 38, NEXT_WIN: 40, RESETS: 42, TEMP: 43, UPTIME: 44, FW: 48,
-	CFG_VER: 52, LADDER: 56, PLMN_MODE: 59, SIZE: 60,
+	CFG_VER: 52, LADDER: 56, PLMN_MODE: 59,
+	/* M6 (mirror ver 3). The cellular half's own count of the alerts its last satellite
+	   datagram left behind. The BLE half served `store_depth - 4` as a labelled estimate in
+	   its place from M4 to M5 (F-M4-8) and now serves this. */
+	ALERTS_DEFERRED: 60, SIZE: 62,
 };
 /* struct status2, 168 B (ver 4). EVERY offset from 55 on moved at version 2, when the embedded
    mirror grew by eight bytes — which is exactly why ver is checked below and not merely carried.
    Version 3 APPENDED its nine bytes, so every offset a version-2 parser knows is unchanged. */
+/* struct status2, 182 B (ver 5).
+   M6 IS NOT AN APPEND, and it is the first one since version 2 that is not. The embedded mirror
+   grew from 60 to 62 bytes to carry alerts_deferred, so EVERY offset below from 63 on moved by
+   two — devices_seen 63 -> 65, store_records 93 -> 95, sess_reason 166 -> 168 — and a parser
+   built for version 4 reading a version 5 frame gets plausible rubbish from offset 63 onward.
+   That is what the leading `ver` is checked for, here and in the firmware, and F-M4-18 is the
+   write-up of the last time it mattered. */
 const S2 = {
 	VER: 0, MIRROR_AGE: 1, MIRROR: 3,
-	DEVICES: 63, EXPECTED: 65, MISSING: 67, ADMITTED: 69, DROPPED: 73, QUARANTINED: 77,
-	SESS_OK: 81, SESS_PARTIAL: 83, SESS_REFUSED: 85, SESS_TIMEOUT: 87,
-	BONDS: 89, BONDS_MAX: 90, SCAN_DUTY: 91, LINK_ALIVE: 92,
-	STORE_RECS: 93, STORE_BYTES: 97, OLDEST_AGE: 101, OVERWRITTEN: 105, ERASE_CYCLES: 109,
-	ALERTS: 113, LATCHED: 114, DEFERRED: 115, HB_AGE: 117, UPTIME: 119, RESET: 123, RESETS: 124,
-	CFG_VER: 125, CFG_FLAGS: 129, CFG_REASON: 130,
+	DEVICES: 65, EXPECTED: 67, MISSING: 69, ADMITTED: 71, DROPPED: 75, QUARANTINED: 79,
+	SESS_OK: 83, SESS_PARTIAL: 85, SESS_REFUSED: 87, SESS_TIMEOUT: 89,
+	BONDS: 91, BONDS_MAX: 92, SCAN_DUTY: 93, LINK_ALIVE: 94,
+	STORE_RECS: 95, STORE_BYTES: 99, OLDEST_AGE: 103, OVERWRITTEN: 107, ERASE_CYCLES: 111,
+	ALERTS: 115, LATCHED: 116, DEFERRED: 117, HB_AGE: 119, UPTIME: 121, RESET: 125, RESETS: 126,
+	CFG_VER: 127, CFG_FLAGS: 131, CFG_REASON: 132,
 	/* M4 */
-	RULES_REASON: 131, LA_DEV: 132, LA_RULE: 134, LA_SEV: 135, LA_FLAGS: 136, LA_AGE: 138,
-	/* M5, appended again: every offset above is unchanged, which is what a version bump is
-	   supposed to cost and is the opposite of what version 2 did. */
-	SESS_OPEN: 140, SESS_MAX: 141, SESS_OPENED: 142, SESS_NO_SLOT: 144, SESS_NO_BUDGET: 146,
-	SESS_BYTES: 148, HIST_RECS: 152, HIST_DUPES: 154, DIN_FRAMES: 156, DIN_REFUSED: 158,
-	DCRED_REFUSED: 160, DCRED_ROWS: 162, DCRED_BACKOFF: 163, SCAN_FLAGS: 164,
-	SESS_PROFILES: 165, SESS_REASON: 166,
-	SIZE: 168,
+	RULES_REASON: 133, LA_DEV: 134, LA_RULE: 136, LA_SEV: 137, LA_FLAGS: 138, LA_AGE: 140,
+	/* M5 */
+	SESS_OPEN: 142, SESS_MAX: 143, SESS_OPENED: 144, SESS_NO_SLOT: 146, SESS_NO_BUDGET: 148,
+	SESS_BYTES: 150, HIST_RECS: 154, HIST_DUPES: 156, DIN_FRAMES: 158, DIN_REFUSED: 160,
+	DCRED_REFUSED: 162, DCRED_ROWS: 164, DCRED_BACKOFF: 165, SCAN_FLAGS: 166,
+	SESS_PROFILES: 167, SESS_REASON: 168,
+	/* M6, appended after the shift. */
+	DROPPED_RETENTION: 170, BOOTS: 174, WDT_RESETS: 176,
+	ST_FLAGS: 178, LOGTAIL_LINES: 179, DECOM: 180, WDT_PERIOD: 181,
+	SIZE: 182,
 };
+
+/* struct logtail_hdr — what a READ of …0011 answers. Subscribing is what fetches the lines. */
+const LOG_OFF = { VER: 0, LINES: 1, PEER_LINES: 2, FLAGS: 3, DROPPED: 4, NOW_MS: 8, SIZE: 12 };
+/* struct logtail_line — one notification. */
+const LOG_LINE = { MS: 0, SRC: 4, LEN: 5, TEXT: 6, SIZE: 96 };
+const LOG_F = { PEER_OK: 1, FETCHING: 2, STALE: 4 };
+/* struct selftest_wire — what a READ of …0013 answers. */
+const SLF_OFF = {
+	VER: 0, FLAGS: 1, PEER_FLAGS: 2, BLE_FW: 4, LTE_FW: 8, PASSKEY: 12,
+	ADDR: 16, ADDR_TYPE: 22, ICCID: 24, IMEI: 44, MODEM_FW: 60, SIZE: 80,
+};
+/* SELFTEST_F_* in link_proto.h. A bit set means THE FACT WAS OBTAINED, never that it was judged
+   good — this firmware has no opinion about whether an IMEI is the right IMEI. */
+const SLF_F = ['ran', 'SIM present', 'ICCID read', 'IMEI read', 'modem firmware read',
+	       'LED cycle played', 'chirped', 'REFUSED (the unit is commissioned)'];
+/* enum buf_audit_source in buffer.h. */
+const DECOM_SRC = ['never', 'the installer, over Bluetooth', 'the platform, through the data plane',
+		   'the button (a factory reset)'];
 /* Names, taken from the firmware and nowhere else: bearer_state_name() and bearer_rung_name() in
    src/nrf9151-app/src/bearer.c, bearer_reason_name() beside them. */
 const BEARER_STATE = ['off', 'configuring', 'sim', 'attaching', 'registered', 'up', 'backoff', 'PARKED'];
@@ -988,6 +1075,9 @@ function parseStatus2(dv) {
 			uptime: g32(b + M.UPTIME), fw: g32(b + M.FW),
 			cfgVer: g32(b + M.CFG_VER), plmnMode: g8(b + M.PLMN_MODE),
 			ladder: [g8(b + M.LADDER), g8(b + M.LADDER + 1), g8(b + M.LADDER + 2)],
+			/* M6 (mirror ver 3): the cellular half's own number, in place of the BLE
+			   half's estimate (F-M4-8). */
+			alertsDeferred: g16(b + M.ALERTS_DEFERRED),
 		},
 		devices: g16(S2.DEVICES), expected: g16(S2.EXPECTED), missing: g16(S2.MISSING),
 		admitted: g32(S2.ADMITTED), dropped: g32(S2.DROPPED), quarantined: g32(S2.QUARANTINED),
@@ -1010,6 +1100,10 @@ function parseStatus2(dv) {
 		dcredRefused: g16(S2.DCRED_REFUSED), dcredRows: g8(S2.DCRED_ROWS),
 		dcredBackoff: g8(S2.DCRED_BACKOFF), scanFlags: g8(S2.SCAN_FLAGS),
 		sessProfiles: g8(S2.SESS_PROFILES), sessReason: g8(S2.SESS_REASON),
+		/* M6 */
+		droppedRetention: g32(S2.DROPPED_RETENTION), boots: g16(S2.BOOTS),
+		wdtResets: g16(S2.WDT_RESETS), stFlags: g8(S2.ST_FLAGS),
+		logLines: g8(S2.LOGTAIL_LINES), decom: g8(S2.DECOM), wdtPeriod: g8(S2.WDT_PERIOD),
 	};
 }
 
@@ -1027,9 +1121,9 @@ const STATUS_GROUPS = [
 	   refusal that is not a failure (no_slot, no_budget) and four outcomes, and reading those
 	   next to "advertisements dropped" would suggest they are the same kind of number. */
 	{ id: 'sess', name: 'Sessions', rows: [['zopen', 'Open now'], ['zopened', 'Opened'], ['zok', 'Complete'], ['zpart', 'Partial'], ['zref', 'Refused'], ['zto', 'Timed out'], ['zwait', 'Waiting'], ['zbytes', 'Read'], ['zhist', 'History'], ['zprof', 'Profiles'], ['zwhy', 'Last profile refusal'], ['zdin', 'Data-in'], ['zcred', 'Credentials']] },
-	{ id: 'store', name: 'Store', rows: [['srec', 'Records held'], ['sbytes', 'Bytes'], ['soldest', 'Oldest'], ['sover', 'Overwritten'], ['serase', 'Erase cycles']] },
+	{ id: 'store', name: 'Store', rows: [['srec', 'Records held'], ['sbytes', 'Bytes'], ['soldest', 'Oldest'], ['sover', 'Overwritten'], ['sretired', 'Retired by policy'], ['serase', 'Erase cycles']] },
 	{ id: 'alerts', name: 'Alerts', rows: [['aact', 'Active'], ['alat', 'Latched'], ['adef', 'Deferred'], ['alast', 'Last alert'], ['arule', 'Rules'], ['awhy', 'Last rule refusal']] },
-	{ id: 'health', name: 'Health', rows: [['hlink', 'Inter-chip link'], ['hhb', 'Last heartbeat'], ['hmir', 'Mirror age'], ['hup', 'BLE uptime'], ['hup91', 'Cellular uptime', 1], ['hreset', 'BLE reset cause'], ['hreset91', 'Cellular reset cause', 1], ['hduty', 'Scan duty'], ['htemp', 'Modem temp', 1]] },
+	{ id: 'health', name: 'Health', rows: [['hlink', 'Inter-chip link'], ['hhb', 'Last heartbeat'], ['hmir', 'Mirror age'], ['hup', 'BLE uptime'], ['hup91', 'Cellular uptime', 1], ['hreset', 'BLE reset cause'], ['hreset91', 'Cellular reset cause', 1], ['hboots', 'Boots'], ['hwdt', 'Watchdog'], ['hduty', 'Scan duty'], ['htemp', 'Modem temp', 1], ['hself', 'Self-test'], ['hdecom', 'Decommissioned'], ['hlog', 'Log tail']] },
 	{ id: 'ctl', name: 'Controls', mirror: true, rows: [['xradio', 'Radio'], ['xpin', 'Rung pin'], ['xprof', 'Cellular profiles'], ['xtime', 'Clock'], ['xtrans', 'Bearer changes']] },
 ];
 function buildStatusPanel() {
@@ -1130,9 +1224,19 @@ function renderStatus2(s) {
 
 	setv('srec', n0(s.storeRecs)); setv('sbytes', n0(s.storeBytes) + ' B');
 	setv('soldest', s.oldestAge ? dur(s.oldestAge) : '—');
-	setv('sover', n0(s.overwritten)); setv('serase', n0(s.eraseCycles));
+	/* TWO drop counters, side by side, because they are different faults with different owners:
+	   "overwritten" is the uplink being behind, "retired" is the unit choosing which class to
+	   lose. An operator who cannot tell them apart cannot tell a network problem from a policy. */
+	setv('sover', n0(s.overwritten));
+	setv('sretired', n0(s.droppedRetention) + (s.droppedRetention ? ' (raw and old digests; never an alert)' : ''));
+	setv('serase', n0(s.eraseCycles));
 
-	setv('aact', n0(s.alerts)); setv('alat', n0(s.latched)); setv('adef', n0(s.deferred));
+	setv('aact', n0(s.alerts)); setv('alat', n0(s.latched));
+	/* Since M6 this is the CELLULAR half's own number, carried in the mirror, and the BLE half
+	   serves the mirror's copy rather than the `store_depth - 4` estimate it had to invent from
+	   M4 to M5 (F-M4-8). The two are shown side by side for exactly one release: if they ever
+	   disagree, the mirror is stale and the age chip above already says so. */
+	setv('adef', n0(s.deferred) + (never ? ' (no mirror yet)' : ''));
 	/* The count says whether anything is wrong; this says what. An installer under a unit with
 	   two rules and one alert needs the second sentence. */
 	setv('alast', s.la.age === NEVER || !s.la.dev ? 'none since boot'
@@ -1151,8 +1255,18 @@ function renderStatus2(s) {
 	setv('hup', dur(s.uptime)); setv('hup91', dur(m.uptime));
 	setv('hreset', s.reset ? bits(s.reset, RESET_BITS).join(' ') || ('0x' + s.reset.toString(16)) : 'none recorded');
 	setv('hreset91', m.reset ? bits(m.reset, RESET_BITS).join(' ') || ('0x' + m.reset.toString(16)) : 'none recorded');
+	setv('hboots', n0(s.boots));
+	/* The watchdog's PERIOD as well as its count. "No watchdog in this build" and "a watchdog
+	   that has never fired" look identical in a panel that only shows the count, and they are
+	   opposite facts. */
+	setv('hwdt', s.wdtPeriod
+		? s.wdtPeriod + ' s armed \u00b7 ' + n0(s.wdtResets) + ' reset(s)'
+		: 'NOT ARMED in this build');
 	setv('hduty', s.scanDuty ? s.scanDuty + ' %' : 'not measured');
 	setv('htemp', m.temp ? m.temp + ' °C' : 'not read');
+	setv('hself', s.stFlags ? bits(s.stFlags, SLF_F).join(', ') : 'never run');
+	setv('hdecom', s.decom ? 'YES \u2014 by ' + (DECOM_SRC[s.decom] || s.decom) : 'no');
+	setv('hlog', s.logLines ? s.logLines + ' line(s) held' : 'none yet');
 
 	setv('xradio', f(0x80) ? 'INHIBITED (bench build)' : 'enabled');
 	setv('xpin', f(0x08) ? 'pinned to ' + (RUNG[m.rung] || m.rung) : 'ladder walks');
@@ -1304,6 +1418,65 @@ function dplFromForm() {
 		endpoint: $('d-endpoint').value.trim(), port: Number($('d-port').value),
 		apn: $('d-apn').value.trim(), token: $('d-token').value.trim() };
 }
+
+/*
+ * ── M6: what the choice above means on the TENANT, and what it will cost on the wire ─────────
+ *
+ * Two things the unit cannot tell the installer and nothing else in the system does either.
+ *
+ * F-M3-23: a ThingsBoard device profile carries a transportType, and a device on a CoAP profile
+ * is refused on MQTT with CONNACK 3 — server unavailable — which reads as a broker outage until
+ * somebody thinks to check the profile. It cost a bench session on 13 September. The class an
+ * installer picks here therefore has a twin they have to set on the tenant, and this says which.
+ *
+ * F-M3-20: on the satellite rung a status is 30 B of protobuf against 37 B of CBOR and an alert
+ * 13 against 16, so at the 82 B a 128-byte datagram leaves, protobuf carries a status and TWO
+ * alerts where CBOR carries a status and ONE. That is not a preference, it is half the alarms.
+ *
+ * It is ADVICE and not validation: the unit's own validator is the one that refuses (config.c),
+ * and a second validator in the tool would drift from it. This only ever says what will happen.
+ */
+const TENANT_PROFILE = [
+	/* TN  */ 'a DEFAULT profile, transport MQTT — a CoAP profile refuses an MQTT CONNECT with code 3, which looks like an outage',
+	/* NTN */ 'the protobuf CoAP profile (tools/thingsboard/profile_protobuf.py)',
+	/* both*/ 'the protobuf CoAP profile (tools/thingsboard/profile_protobuf.py)',
+];
+
+function dplAdvice() {
+	const d = dplFromForm();
+	const sat = d.cls === 1 || d.cls === 2;
+	const out = [];
+
+	if (d.transport === 1) {
+		out.push('<b>On the tenant:</b> this device needs ' + TENANT_PROFILE[0] +
+			 '. Nothing on the unit or the platform warns when the two disagree.');
+	} else {
+		out.push('<b>On the tenant:</b> this device needs ' + TENANT_PROFILE[sat ? 1 : 0] +
+			 (d.encoding === 2 ? '' : ' — and a JSON or CBOR device wants the DEFAULT profile instead'));
+	}
+	if (sat && d.encoding !== 2) {
+		out.push('<b>Encoding:</b> a class that includes satellite should be <b>protobuf</b>. ' +
+			 'Measured on this firmware: at the 82 bytes a 128-byte satellite datagram leaves, ' +
+			 'protobuf carries a status and <b>two</b> alerts, CBOR a status and <b>one</b>. ' +
+			 'The unit will accept CBOR and send half the alarms.');
+	}
+	if (sat && d.transport === 1) {
+		out.push('<b>The unit will refuse this.</b> MQTT is a terrestrial-only privilege ' +
+			 '(SPEC 07 D1) and the BLE half checks it before a byte reaches the modem.');
+	}
+	const el = $('n-dpladvice');
+
+	if (el) {
+		el.innerHTML = out.map(t => '<p class="note' +
+			(t.indexOf('will refuse') >= 0 ? ' stop' : t.indexOf('Encoding:') === 0 ? ' warn' : '') +
+			'">' + t + '</p>').join('');
+	}
+}
+for (const id of ['d-class', 'd-transport', 'd-encoding']) {
+	const el = $(id);
+
+	if (el) el.addEventListener('change', dplAdvice);
+}
 /* The token box is NEVER filled from the unit - the unit does not send it back. It is left
    exactly as the installer typed it, so a read arriving mid-edit cannot wipe what they are in
    the middle of writing. */
@@ -1312,6 +1485,7 @@ function dplToForm(d) {
 	$('d-endpoint').value = d.endpoint; $('d-port').value = String(d.port); $('d-apn').value = d.apn || '';
 	$('dpl-st').textContent = (CLASS_NAME[d.cls] || ('class ' + d.cls)) + ' · ' + d.endpoint + ':' + d.port +
 		(d.apn ? ' · apn ' + d.apn : '');
+	dplAdvice();
 }
 
 /* Why the reason comes from a status read and not from the thrown error: Chrome reports every
@@ -1901,12 +2075,200 @@ function showCfgPanels() {
 		for (let i = 0; i < SESS_SLOTS; i++) $('se-slot').add(new Option('slot ' + i, String(i)));
 		$('se-slot').onchange = () => readSession(false);
 	}
+	/* M6. Three panels, and each is hidden on a unit that does not expose its characteristic —
+	   which on the log and the self-test is any firmware before this milestone. */
+	$('p-log2').hidden = !chars.log;
+	$('p-slf').hidden = !chars.slf;
+	/* The decommission is on the COMMAND characteristic, which every firmware since M1 has, so
+	   the panel is shown whenever there is a unit — and the unit refuses the command if it is
+	   older than M6, which the refusal note explains. The confirmation is pre-filled from the
+	   advertised name so an installer can see what they are being asked to type. */
+	$('p-decom').hidden = !chars.cmd;
+	if (chars.cmd) {
+		const last4 = lastFourHex();
+
+		$('dx-hint').textContent = last4
+			? 'this unit\u2019s name ends ' + last4 + ' \u2014 type exactly that'
+			: 'read them off the label; this unit\u2019s name does not carry an address';
+	}
 	if (chars.net) readNet(true);
 	if (chars.dpl) readDpl(true);
 	if (chars.rul) readRules(true);
 	if (chars.scn) readScan(true);
 	if (chars.ses) readSession(true);
+	if (chars.slf) readSelftest(true);
 }
+
+/* ── M6: the log tail ────────────────────────────────────────────────────────────────────────
+   A READ answers the header — how many lines, from which halves, how old is the newest — and
+   SUBSCRIBING is the fetch. The lines arrive newest first, one per notification, and a
+   zero-length line marks the end. Without that marker "that is all of it" and "the link stopped"
+   are the same thing on the screen, and they are opposite diagnoses. */
+/* The other panels build their note element inline; three new panels wanting the same three
+   classes is the point at which one helper is fewer lines than three copies. `kind` is 'good',
+   'warn', 'bad' or null for a plain one. */
+function note(id, text, kind) {
+	const el = $(id);
+
+	if (!el) return;
+	el.innerHTML = '<p class="note' + (kind === 'good' ? ' go' : kind === 'bad' ? ' stop'
+		: kind === 'warn' ? ' warn' : '') + '">' +
+		text.replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c])) + '</p>';
+}
+
+let logLines = [], logDone = false;
+
+function fmtLogAge(ms, nowMs) {
+	const d = Math.max(0, nowMs - ms);
+	if (d < 1000) return '0.0 s';
+	if (d < 90000) return (d / 1000).toFixed(1) + ' s';
+	if (d < 5400000) return Math.round(d / 60000) + ' min';
+	return (d / 3600000).toFixed(1) + ' h';
+}
+
+function renderLog(nowMs) {
+	const ol = $('logt-lines');
+
+	ol.innerHTML = logLines.map(l =>
+		'<li><span class="pill ' + (l.src ? 'warn' : 'dim') + '">' +
+		(l.src ? 'LTE' : 'BLE') + '</span> <span class="dim">' +
+		fmtLogAge(l.ms, nowMs) + ' ago</span> ' +
+		l.text.replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c])) +
+		'</li>').join('');
+	$('logt-count').textContent = logLines.length + ' line(s)' + (logDone ? '' : ' \u2026');
+	$('logt-count').className = 'pill ' + (logDone ? 'go' : 'warn');
+}
+
+async function fetchLog() {
+	if (!chars.log) return;
+	logLines = []; logDone = false;
+	$('logt-lines').innerHTML = '';
+	note('n-logt', 'fetching \u2014 the cellular half\u2019s lines cross the inter-chip link, which takes a moment', null);
+	try {
+		const hdr = await gattOp(() => chars.log.readValue(), 'log header');
+		const flags = hdr.getUint8(LOG_OFF.FLAGS);
+		const nowMs = hdr.getUint32(LOG_OFF.NOW_MS, true);
+
+		$('logt-st').textContent = hdr.getUint8(LOG_OFF.LINES) + ' line(s), ' +
+			hdr.getUint8(LOG_OFF.PEER_LINES) + ' from the cellular half' +
+			((flags & LOG_F.STALE) ? ' \u00b7 rate-limited, showing the previous fetch' : '') +
+			(hdr.getUint32(LOG_OFF.DROPPED, true) ? ' \u00b7 ' + hdr.getUint32(LOG_OFF.DROPPED, true) + ' dropped' : '');
+
+		await gattOp(() => chars.log.startNotifications(), 'log notifications');
+		chars.log.addEventListener('characteristicvaluechanged', ev => {
+			const dv = ev.target.value;
+
+			if (dv.byteLength < LOG_LINE.SIZE) return;
+			const len = dv.getUint8(LOG_LINE.LEN);
+
+			if (len === 0) {                       /* the end marker */
+				logDone = true;
+				renderLog(nowMs);
+				gattOp(() => chars.log.stopNotifications(), 'log notifications off')
+					.catch(() => {});
+				note('n-logt', logLines.length + ' line(s), both halves, newest first', 'good');
+				return;
+			}
+			let t = '';
+			for (let i = 0; i < len && i < 90; i++) t += String.fromCharCode(dv.getUint8(LOG_LINE.TEXT + i));
+			logLines.push({ ms: dv.getUint32(LOG_LINE.MS, true), src: dv.getUint8(LOG_LINE.SRC), text: t });
+			renderLog(nowMs);
+		});
+	} catch (e) {
+		note('n-logt', 'could not fetch the log: ' + explainWriteError(e), 'bad');
+	}
+}
+
+/* ── M6: the self-test result ───────────────────────────────────────────────────────────────── */
+function str(dv, off, max) {
+	let out = '';
+	for (let i = 0; i < max; i++) {
+		const c = dv.getUint8(off + i);
+
+		if (!c) break;
+		out += String.fromCharCode(c);
+	}
+	return out;
+}
+
+async function readSelftest(quiet) {
+	if (!chars.slf) return;
+	try {
+		const dv = await gattOp(() => chars.slf.readValue(), 'selftest');
+
+		if (dv.byteLength < SLF_OFF.SIZE) throw new Error('selftest is ' + dv.byteLength + ' bytes, expected ' + SLF_OFF.SIZE);
+		const flags = dv.getUint8(SLF_OFF.FLAGS);
+		const addr = [];
+
+		for (let i = 5; i >= 0; i--) addr.push(dv.getUint8(SLF_OFF.ADDR + i).toString(16).padStart(2, '0').toUpperCase());
+		$('v-slfstate').textContent = flags ? bits(flags, SLF_F).join(', ') : 'never run on this unit';
+		$('v-slficcid').textContent = str(dv, SLF_OFF.ICCID, 20) || '(none)';
+		$('v-slfimei').textContent = str(dv, SLF_OFF.IMEI, 16) || '(none)';
+		$('v-slfmfw').textContent = str(dv, SLF_OFF.MODEM_FW, 20) || '(none)';
+		$('v-slffw').textContent = 'BLE ' + fwStr(dv.getUint32(SLF_OFF.BLE_FW, true)) +
+			' \u00b7 cellular ' + fwStr(dv.getUint32(SLF_OFF.LTE_FW, true));
+		$('v-slfaddr').textContent = addr.join(':');
+		$('v-slfpk').textContent = String(dv.getUint32(SLF_OFF.PASSKEY, true)).padStart(6, '0');
+		$('slf-st').textContent = flags ? 'run' : 'never run';
+		if (!quiet) note('n-slf', 'read back from the unit', 'good');
+	} catch (e) {
+		if (!quiet) note('n-slf', 'could not read the self-test: ' + explainWriteError(e), 'bad');
+	}
+}
+
+/* ── M6: decommission ────────────────────────────────────────────────────────────────────────
+   The confirmation is a check against the WRONG UNIT and not against an attacker: an
+   authenticated bond is already required and anyone who has one can do this. On a site with five
+   gateways in a cabinet, typing the wrong one is the mistake that actually happens. */
+function lastFourHex() {
+	const m = /([0-9A-F]{12})$/i.exec((dev && dev.name) || '');
+
+	return m ? m[1].slice(-4).toUpperCase() : null;
+}
+
+async function decommission() {
+	const typed = ($('dx-confirm').value || '').replace(/[^0-9a-fA-F]/g, '').toUpperCase();
+
+	if (typed.length !== 4) {
+		note('n-decom', 'type the four hex digits first', 'warn');
+		return;
+	}
+	/* The unit checks this too, against its own address, and its answer is the one that counts.
+	   The tool checks it as well so that a typo is a message rather than a refused write with no
+	   reason — Chrome surfaces no ATT error code to a Web Bluetooth caller. */
+	const expect = lastFourHex();
+
+	if (expect && typed !== expect) {
+		note('n-decom', 'that is not this unit: its name ends ' + expect, 'bad');
+		return;
+	}
+	/* arg[0] is the LOW byte and arg[1] the next, little-endian, the way every other multi-byte
+	   field on this service is. The four digits an installer reads are printed high byte first,
+	   so they are packed in reverse here. */
+	const hi = parseInt(typed.slice(0, 2), 16), lo = parseInt(typed.slice(2, 4), 16);
+
+	try {
+		await gattOp(() => chars.cmd.writeValue(new Uint8Array([13, lo, hi, 0])), 'decommission');
+		note('n-decom', 'decommissioned. The unit is uncommissioned with its window open; its odometer and its audit line are intact.', 'good');
+		say('DECOMMISSIONED ' + ((dev && dev.name) || 'the unit'), 'warn');
+		$('dx-confirm').value = '';
+		setTimeout(() => readStatus2(), 1500);
+	} catch (e) {
+		note('n-decom', 'refused: ' + explainWriteError(e) + ' (a firmware older than M6 does not have this command)', 'bad');
+	}
+}
+
+$('b-logfetch').onclick = e => { e.stopPropagation(); fetchLog(); };
+$('b-logcopy').onclick = e => {
+	e.stopPropagation();
+	navigator.clipboard.writeText(logLines.map(l => (l.src ? 'LTE | ' : 'BLE | ') + l.text).join('\n'))
+		.then(() => say('log copied')).catch(() => say('could not copy', 'warn'));
+};
+$('b-slfread').onclick = e => { e.stopPropagation(); readSelftest(false); };
+$('dx-confirm').oninput = () => {
+	$('b-decom').disabled = ($('dx-confirm').value || '').replace(/[^0-9a-fA-F]/g, '').length !== 4;
+};
+$('b-decom').onclick = e => { e.stopPropagation(); decommission(); };
 $('b-ruleswrite').onclick = async e => { e.stopPropagation(); $('b-ruleswrite').disabled = true; await writeRules(); $('b-ruleswrite').disabled = false; };
 $('b-rulesread').onclick = e => { e.stopPropagation(); readRules(false); };
 $('b-ruleadd').onclick = e => {
