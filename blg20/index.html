@@ -3131,7 +3131,28 @@ $('b-connect').onclick = async () => {
 		startStatusPoll();
 		showCfgPanels();
 	} catch (e) {
-		if (e.name === 'NotFoundError') { say('no unit chosen'); return; }
+		if (e.name === 'NotFoundError') {
+			/*
+			 * NotFoundError covers BOTH "you closed the chooser" and "the chooser found
+			 * nothing", and the API does not distinguish them - so this has to answer the
+			 * worse case, which is the one that leaves an installer stuck.
+			 *
+			 * A COMMISSIONED unit stops advertising five minutes after power-on. That is
+			 * deliberate, and it is invisible: the chooser simply stays empty, with nothing
+			 * anywhere saying why. Somebody meeting this gateway for the first time
+			 * reasonably concludes it is dead. Measured on the bench, 16 Sep.
+			 */
+			say('no unit chosen', 'bad');
+			$('n-connect').innerHTML = '<p class="note warn"><b>Nothing in the list?</b> ' +
+				'A commissioned gateway stops advertising <b>five minutes</b> after it is ' +
+				'powered on. Hold its <b>DFU1</b> button for 3\u20135 seconds to open the ' +
+				'commissioning window again, then press Connect. The light changes when the ' +
+				'window is open.<br><br>Still nothing, on a Mac? Chrome needs Bluetooth ' +
+				'permission: System Settings \u2192 Privacy &amp; Security \u2192 Bluetooth ' +
+				'\u2192 Google Chrome. The chooser stays empty and says nothing when that is ' +
+				'off. Quit Chrome fully and reopen it after granting.</p>';
+			return;
+		}
 		if (e.name === 'SecurityError') { $('n-connect').innerHTML = '<p class="note stop"><b>Bluetooth is blocked here.</b> Open the page in its own tab.</p>'; return; }
 		say('could not connect: ' + explainWriteError(e), 'bad');
 	}
