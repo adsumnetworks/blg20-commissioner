@@ -181,14 +181,28 @@
 	<div class="unit">
 		<span id="u-name" class="pill dim">no unit</span><span id="u-pk" class="pill go mono" hidden></span>
 		<span id="u-fw" class="pill dim" hidden>fw ?</span>
+		<span id="u-kind" class="pill warn" hidden>DEMO</span>
 		<span id="u-state" class="pill dim">—</span>
 	</div>
 </div>
 
 <div class="wrap">
 
-<h1>Commission a gateway <span class="pill dim" id="build-stamp" style="font-size:.7rem;vertical-align:middle;margin-left:8px">build 13 Sep 2026 · issue 3 · M7 access</span></h1>
+<h1>Commission a gateway <span class="pill dim" id="build-stamp" style="font-size:.7rem;vertical-align:middle;margin-left:8px">build 16 Sep 2026 · issue 3 · demo limits</span></h1>
 <p class="lede">Stand next to the unit. Everything below is written over Bluetooth and read back from the unit's own account of itself — nothing is trusted because a button was pressed.</p>
+
+<!-- Shown only when the unit reports an evaluation build. The limits are read from the unit, not
+     written here, so this panel cannot promise a number the firmware does not hold. -->
+<section class="panel open" id="p-demo" hidden>
+	<div class="bd">
+		<p><strong>This gateway is running demo firmware.</strong> It does everything the
+		production firmware does, with three limits — and the limits are in this build only.
+		Production firmware has none of them.</p>
+		<ul id="demo-limits"></ul>
+		<p class="muted">Nothing here needs a reboot, and restarting the unit does not reset
+		any of it. When you are ready for an unlimited unit, ask for a production licence.</p>
+	</div>
+</section>
 
 <div class="qrcard"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAASgAAAEoAQAAAADDfFG0AAACA0lEQVR4nO1awa7DMAgDtP//ZU9gSLr1slPDJHh7bZpysJAhDqlCfjD7xUnGq2y8yl4iypETTSEKv3BivemK3h73emWkRPkD4uq/y5uu6O1IvEQjMpoU87uSZ/mmLXo76gWN8Hi0IM6zJrja8Wubs0tAfv0BejsTL+SDJyA+0hO90dvjXoIdLNz+yqUrenvcS3faaVR6ro7+jP7o7Qi/sAeou8/V/PBrm0UiImt8FC0nl/9XyEZ/XQ1FJewEXBRLwg2/lkWxQowEpVV35Hyssx/64hcq93JQa2bNDr+27XSUDBirWeYk49cVvT3upUujIot8pGfIDKoKH3ZFb6f1l6QGY+Faj13R2+NespQWtqh3yRXvsrxNPt74pSXuuUoyD/1h1sebV8jU3GhzQO2VbcOpXxdLFqGYVjX/0o6efvS3l7KfmmGqfqGmmBh+3ffb2LX+ew8+9f7eL1R26yMxs4nP2sXDj7bo7ZwX8piDWRlXXaP26B+uX/g8hVxdV80dUWv05/S98L4Pb1Pzt0VvJ8+3QWGR7ZzIxVL5XdHbyfNtXUeOkZB1SuRR64reTp5vS6guKvsQsfsriq7o7eh5rWa41ocBS+J3RW9HvVB6ggQLWcZ22D+gf9AL3Pnk1xMs/JzPNbM1+sfzUTmshg6bEp6O3EcOvy728VnJ36G38Urr6vUGLN8u2h+KMg4AAAAASUVORK5CYII=" alt="QR code for this page" width="132" height="132"><p><b>Open this on a phone.</b> Scan with the camera and open the link in <b>Chrome</b> — Web Bluetooth needs Chrome on Android; iOS has none. The same page, the same address, no install:<br><code>https://commission.adsumnetworks.com/blg20/</code></p></div>
 
@@ -855,7 +869,16 @@ const LADDER = ['allowed',
 	'no satellite subscription',
 	'the configuration disallows it',
 	'the locked network never answered',
-	'roaming refused'];
+	'roaming refused',
+	/* 8-10 are the licence and the demo cap. 8 is RESERVED in the firmware and no image sets
+	 * it yet; it is here so that the two below sit at the indices the unit actually sends -
+	 * an array is read by position, and a missing entry silently shifts every one after it. */
+	'no licence has been verified for this unit',
+	'the demo allowance is spent \u2014 Limited use for demos; ask for the production demo',
+	/* 10's row is BUILT, not printed: see ladderReason(). This entry is only the fallback for a
+	   mirror that carries no countdown, and it deliberately names no number - the unit knows how
+	   long is left and this page does not. */
+	'the demo window is closed; it re-arms by itself'];
 const PLMN_MODE = ['automatic', 'preferring a list', 'locked to one'];
 const CLASS_NAME = ['TN \u2014 terrestrial only', 'NTN \u2014 satellite only', 'TN+NTN \u2014 the ladder'];
 const METHOD = { INSTALLER_PHONE: 1, MANUAL: 2, CELLULAR: 3, SURVEY_GNSS: 4 };
@@ -1115,8 +1138,16 @@ const S2 = {
 	ACC_DROPPED_RULE: 182, ACC_COUNTED: 186, ACC_RATE: 190, ACC_DEDUPED: 194, ACC_BUDGET: 198,
 	ACC_QUAR_NOW: 202, ACC_EXP_N: 204, ACC_EXP_SEEN: 206, ACC_BUDGET_MIN: 208,
 	ACC_TERMINAL: 210, ACC_RULES: 211, ACC_REASON: 212, ACC_AT: 213, ACC_FLAGS: 214,
-	SIZE: 218,
+	/* ver 7, APPENDED — three of these four came out of the old _pad4, so exactly one byte was
+	   added and every offset above is unchanged. What kind of image is running, and what the
+	   evaluation build limits. */
+	BUILD_KIND: 215, FLEET_N: 216, FLEET_MAX: 217, CLEARS_LEFT: 218,
+	SIZE: 219,
 };
+
+/* status2.build_kind. An evaluation image is one that CARRIES the fleet limit, so this cannot
+   drift from what the unit actually does — there is no string for anyone to forget to change. */
+const BUILD_KIND = ['production', 'evaluation', 'bench'];
 
 /* struct logtail_hdr — what a READ of …0011 answers. Subscribing is what fetches the lines. */
 const LOG_OFF = { VER: 0, LINES: 1, PEER_LINES: 2, FLAGS: 3, DROPPED: 4, NOW_MS: 8, SIZE: 12 };
@@ -1167,10 +1198,22 @@ function pct(a, b) { return b ? Math.round(a * 100 / b) + ' %' : '—'; }
    page has read; the REASONS come from the mirror. When net has not been read the rungs are
    listed by index and say so, rather than implying an order nobody stated. */
 let lastNet = null, lastDpl = null;
+/* One reason, in words. Reason 10 (the demo window is closed) is the only one that is BUILT
+   rather than looked up: while the window is closed the unit puts the re-arm countdown in
+   next_window_s (the mirror field this page already renders at 'unext'), so the row can say when
+   uplink returns instead of asserting a configured default the unit may not be running. dur() is
+   reused deliberately - it is this page's word for a duration and it is what 'unext' shows two
+   rows away; the same number in two formats reads as two numbers. */
+function ladderReason(m, code) {
+	if (code === 10 && m.nextWin && m.nextWin !== NEVER) {
+		return 'the demo window is closed; uplink returns by itself in ' + dur(m.nextWin);
+	}
+	return LADDER[code] || ('reason ' + code);
+}
 function ladderWords(m) {
 	const stated = lastNet ? lastNet.order.filter(r => r < 3) : [];
 	const rest = [0, 1, 2].filter(r => stated.indexOf(r) < 0);
-	return stated.concat(rest).map(r => RUNG[r] + ' ' + (LADDER[m.ladder[r]] || ('reason ' + m.ladder[r]))).join(' \u00b7 ');
+	return stated.concat(rest).map(r => RUNG[r] + ' ' + ladderReason(m, m.ladder[r])).join(' \u00b7 ');
 }
 
 function parseStatus2(dv) {
@@ -1230,6 +1273,11 @@ function parseStatus2(dv) {
 		accBudgetMin: g16(S2.ACC_BUDGET_MIN), accTerminal: g8(S2.ACC_TERMINAL),
 		accRules: g8(S2.ACC_RULES), accReason: g8(S2.ACC_REASON), accAt: g8(S2.ACC_AT),
 		accFlags: g8(S2.ACC_FLAGS),
+		/* ver 7. Read unguarded on purpose: the length check at the top of this function has
+		   already refused anything shorter than S2.SIZE, so a version-6 unit never reaches
+		   here at all. Guarding each field would imply a fallback this page does not offer. */
+		buildKind: g8(S2.BUILD_KIND), fleetN: g8(S2.FLEET_N),
+		fleetMax: g8(S2.FLEET_MAX), clearsLeft: g8(S2.CLEARS_LEFT),
 	};
 }
 
@@ -1272,9 +1320,60 @@ function buildStatusPanel() {
 const setv = (k, v) => { const el = $('v-' + k); if (el) el.textContent = v; };
 
 let sta2Timer = null, lastSta2 = null;
+/*
+ * The demo badge, and the panel that says what a demo build actually means.
+ *
+ * Every number here is READ FROM THE UNIT — the fleet from the Bluetooth half, the two monthly
+ * allowances out of the mirror the cellular half sends. Nothing is written into this page as a
+ * constant, because a page that states a limit the firmware does not hold is worse than a page
+ * that states none: the installer would trust it.
+ */
+function renderBuildKind(s) {
+	const m = s.m, evaluation = s.buildKind === 1;
+	const kind = $('u-kind'), panel = $('p-demo');
+
+	kind.hidden = !evaluation && s.buildKind !== 2;
+	if (s.buildKind === 2) {
+		kind.textContent = 'BENCH';
+		kind.className = 'pill warn';
+	} else if (evaluation) {
+		kind.textContent = 'DEMO';
+		kind.className = 'pill warn';
+	}
+	panel.hidden = !evaluation;
+	if (!evaluation) return;
+
+	/* A cap of 0 means NO ceiling, so it is left out entirely rather than drawn as "0 bytes" —
+	   which would read as a unit that may send nothing at all. Both caps are in bytes on the
+	   wire; these are the units a person uses, not the ones the struct uses. */
+	const size = n => n >= 1000000 ? (n / 1000000) + ' MB' : (n / 1000) + ' KB';
+	const rows = [];
+	if (s.fleetMax) {
+		rows.push('<strong>' + s.fleetMax + ' devices.</strong> The first ' + s.fleetMax +
+			' this gateway hears become its set — ' + s.fleetN + ' so far. Anything after ' +
+			'that is still seen and still listed below, it just is not sent on. The set ' +
+			'survives a restart; you can clear it and start again ' + s.clearsLeft +
+			' more time' + (s.clearsLeft === 1 ? '' : 's') + '.');
+	}
+	if (m.cap) {
+		rows.push('<strong>' + size(m.cap) + ' a month</strong> over mobile — roughly two ' +
+			'hundred times what this gateway actually sends, so you are unlikely to meet ' +
+			'it. If the month does run out, uplink waits for the next one and everything ' +
+			'else keeps working.');
+	}
+	if (m.satCap) {
+		rows.push('<strong>' + size(m.satCap) + ' a month</strong> over satellite, which is ' +
+			'the whole satellite package — only alerts and the occasional update go that ' +
+			'way, so this is a backstop rather than a ration.');
+	}
+	$('demo-limits').innerHTML = rows.map(r => '<li>' + r + '</li>').join('');
+}
+
 function renderStatus2(s) {
 	const m = s.m, stale = s.age !== NEVER && s.age > 10, never = s.age === NEVER;
 	const f = n => (m.flags & n) !== 0;
+
+	renderBuildKind(s);
 
 	$('s-status').classList.toggle('stale', stale || never);
 	const chip = $('sta2-age');
