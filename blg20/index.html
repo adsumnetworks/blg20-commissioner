@@ -188,19 +188,18 @@
 
 <div class="wrap">
 
-<h1>Commission a gateway <span class="pill dim" id="build-stamp" style="font-size:.7rem;vertical-align:middle;margin-left:8px">build 16 Sep 2026 · issue 3 · demo limits</span></h1>
+<h1>Commission a gateway <span class="pill dim" id="build-stamp" style="font-size:.7rem;vertical-align:middle;margin-left:8px">build 16 Sep 2026 · issue 3 · uplink limits</span></h1>
 <p class="lede">Stand next to the unit. Everything below is written over Bluetooth and read back from the unit's own account of itself — nothing is trusted because a button was pressed.</p>
 
 <!-- Shown only when the unit reports an evaluation build. The limits are read from the unit, not
      written here, so this panel cannot promise a number the firmware does not hold. -->
-<section class="panel open" id="p-demo" hidden>
+<!-- Shown for any unit that reports a limit of any kind, demo or production. The wording and
+     the numbers are filled from what the UNIT reports; nothing about them is written here. -->
+<section class="panel open" id="p-limits" hidden>
 	<div class="bd">
-		<p><strong>This gateway is running demo firmware.</strong> It does everything the
-		production firmware does, with three limits — and the limits are in this build only.
-		Production firmware has none of them.</p>
-		<ul id="demo-limits"></ul>
-		<p class="muted">Nothing here needs a reboot, and restarting the unit does not reset
-		any of it. When you are ready for an unlimited unit, ask for a production licence.</p>
+		<p id="limits-lede"></p>
+		<ul id="limits-list"></ul>
+		<p class="muted" id="limits-foot"></p>
 	</div>
 </section>
 
@@ -1328,11 +1327,21 @@ let sta2Timer = null, lastSta2 = null;
  * constant, because a page that states a limit the firmware does not hold is worse than a page
  * that states none: the installer would trust it.
  */
+/*
+ * What kind of image this is, and what it limits. Drawn for a production unit as well as an
+ * evaluation one, because a production gateway carries uplink guards too and an installer who
+ * meets one with no explanation has no way to tell a safety limit from a fault.
+ *
+ * Every number is READ FROM THE UNIT - the fleet from the Bluetooth half, the two monthly
+ * allowances out of the cellular half's mirror. Nothing is written into this page as a constant,
+ * because a page stating a limit the firmware does not hold is worse than one stating none: the
+ * installer would believe it.
+ */
 function renderBuildKind(s) {
 	const m = s.m, evaluation = s.buildKind === 1;
-	const kind = $('u-kind'), panel = $('p-demo');
+	const kind = $('u-kind'), panel = $('p-limits');
 
-	kind.hidden = !evaluation && s.buildKind !== 2;
+	kind.hidden = s.buildKind === 0;
 	if (s.buildKind === 2) {
 		kind.textContent = 'BENCH';
 		kind.className = 'pill warn';
@@ -1340,15 +1349,13 @@ function renderBuildKind(s) {
 		kind.textContent = 'DEMO';
 		kind.className = 'pill warn';
 	}
-	panel.hidden = !evaluation;
-	if (!evaluation) return;
 
-	/* A cap of 0 means NO ceiling, so it is left out entirely rather than drawn as "0 bytes" —
-	   which would read as a unit that may send nothing at all. Both caps are in bytes on the
-	   wire; these are the units a person uses, not the ones the struct uses. */
+	/* A cap of 0 means no ceiling, so it is left out rather than drawn as "0 bytes" - which
+	   would read as a unit permitted to send nothing at all. Both caps are bytes on the wire;
+	   these are the units a person uses. */
 	const size = n => n >= 1000000 ? (n / 1000000) + ' MB' : (n / 1000) + ' KB';
 	const rows = [];
-	if (s.fleetMax) {
+	if (evaluation && s.fleetMax) {
 		rows.push('<strong>' + s.fleetMax + ' devices.</strong> The first ' + s.fleetMax +
 			' this gateway hears become its set — ' + s.fleetN + ' so far. Anything after ' +
 			'that is still seen and still listed below, it just is not sent on. The set ' +
@@ -1356,17 +1363,37 @@ function renderBuildKind(s) {
 			' more time' + (s.clearsLeft === 1 ? '' : 's') + '.');
 	}
 	if (m.cap) {
-		rows.push('<strong>' + size(m.cap) + ' a month</strong> over mobile — roughly two ' +
-			'hundred times what this gateway actually sends, so you are unlikely to meet ' +
-			'it. If the month does run out, uplink waits for the next one and everything ' +
-			'else keeps working.');
+		rows.push('<strong>' + size(m.cap) + ' a month</strong> over mobile' +
+			(evaluation ? ' — roughly two hundred times what this gateway actually sends, so '
+				+ 'you are unlikely to meet it.'
+				: '. If the month runs out, uplink waits for the next one and everything '
+				+ 'else keeps working.'));
 	}
 	if (m.satCap) {
-		rows.push('<strong>' + size(m.satCap) + ' a month</strong> over satellite, which is ' +
-			'the whole satellite package — only alerts and the occasional update go that ' +
-			'way, so this is a backstop rather than a ration.');
+		rows.push('<strong>' + size(m.satCap) + ' a month</strong> over satellite, which is the ' +
+			'whole satellite package — only alerts and the occasional update go that way.');
 	}
-	$('demo-limits').innerHTML = rows.map(r => '<li>' + r + '</li>').join('');
+
+	panel.hidden = rows.length === 0;
+	if (panel.hidden) return;
+
+	$('limits-list').innerHTML = rows.map(r => '<li>' + r + '</li>').join('');
+	if (evaluation) {
+		$('limits-lede').innerHTML = '<strong>This gateway is running demo firmware.</strong> ' +
+			'It does everything the production firmware does, with the limits below — and they ' +
+			'are in this build only. Production firmware has no device limit.';
+		$('limits-foot').textContent = 'Nothing here needs a reboot, and restarting the unit ' +
+			'resets none of it. When you are ready for an unlimited unit, ask for a production ' +
+			'licence.';
+	} else {
+		$('limits-lede').innerHTML = '<strong>Uplink protection.</strong> This gateway carries ' +
+			'monthly ceilings on what it may send. They are safety limits rather than an ' +
+			'allowance — set far above what the gateway actually uses, so that a fault cannot ' +
+			'quietly run up a bill.';
+		$('limits-foot').textContent = 'Normal use comes nowhere near these. Reaching one is a ' +
+			'sign something is wrong rather than a sign of a busy month, and it is worth ' +
+			'reporting. Uplink resumes by itself at the start of the next month.';
+	}
 }
 
 function renderStatus2(s) {
