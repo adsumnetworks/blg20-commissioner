@@ -1363,11 +1363,15 @@ function renderBuildKind(s) {
 			' more time' + (s.clearsLeft === 1 ? '' : 's') + '.');
 	}
 	if (m.cap) {
+		/* A gateway running continuously uses about 5.5 MB a month (96 windows a day at
+		   ~1.9 kB), so the demo's ceiling is genuinely reachable and the page must not tell
+		   an evaluator otherwise. What matters is that meeting it is not a fault. */
 		rows.push('<strong>' + size(m.cap) + ' a month</strong> over mobile' +
-			(evaluation ? ' — roughly two hundred times what this gateway actually sends, so '
-				+ 'you are unlikely to meet it.'
-				: '. If the month runs out, uplink waits for the next one and everything '
-				+ 'else keeps working.'));
+			(evaluation ? '. A gateway left running uses around 5.5 MB a month, so a long '
+				+ 'evaluation can reach this. If it does, uplink waits for the next month '
+				+ 'and everything else keeps working.'
+				: ' — around nine times what an ordinary gateway uses. If the month runs '
+				+ 'out, uplink waits for the next one and everything else keeps working.'));
 	}
 	if (m.satCap) {
 		rows.push('<strong>' + size(m.satCap) + ' a month</strong> over satellite, which is the ' +
