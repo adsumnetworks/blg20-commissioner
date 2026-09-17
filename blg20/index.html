@@ -188,7 +188,7 @@
 
 <div class="wrap">
 
-<h1>Commission a gateway <span class="pill dim" id="build-stamp" style="font-size:.7rem;vertical-align:middle;margin-left:8px">build 16 Sep 2026 · issue 3 · uplink limits</span></h1>
+<h1>Commission a gateway <span class="pill dim" id="build-stamp" style="font-size:.7rem;vertical-align:middle;margin-left:8px">build 17 Sep 2026 · issue 3 · uplink limits</span></h1>
 <p class="lede">Stand next to the unit. Everything below is written over Bluetooth and read back from the unit's own account of itself — nothing is trusted because a button was pressed.</p>
 
 <!-- Shown only when the unit reports an evaluation build. The limits are read from the unit, not
@@ -812,8 +812,10 @@ const ORDER_END = 0xFF;
    the reason out of status2. Chrome throws away the ATT error code, so the byte is the channel. */
 const CFG_REASON = ['ok',
 	'MQTT and JSON are refused on a class that includes satellite',
-	'an allowed access is outside the deployment class',
-	'the order is not a permutation of the allowed accesses',
+	'an allowed access is outside the deployment class \u2014 open Network policy, untick satellite ' +
+		'under Allowed accesses AND clear it from the Ladder rungs, write that, then write this class',
+	'the order is not a permutation of the allowed accesses \u2014 a rung still names an access you have ' +
+		'unticked: clear that rung in Network policy before writing',
 	'a PLMN is not MCC+MNC in 100000\u2013999999',
 	'the endpoint, the port, the APN or the device token is malformed',
 	'a band is outside what that rung may lock to',
@@ -1383,9 +1385,12 @@ function renderBuildKind(s) {
 
 	$('limits-list').innerHTML = rows.map(r => '<li>' + r + '</li>').join('');
 	if (evaluation) {
-		$('limits-lede').innerHTML = '<strong>This gateway is running demo firmware.</strong> ' +
-			'It does everything the production firmware does, with the limits below — and they ' +
-			'are in this build only. Production firmware has no device limit.';
+		$('limits-lede').innerHTML = '<strong>Evaluation firmware.</strong> It hears your ' +
+			'sensors, keeps their readings and sends them to your own platform — with the three ' +
+			'limits below, and those limits are in this build only.<br><br>' +
+			'<strong>No device-management client:</strong> this unit will not appear in a ' +
+			'console and cannot be updated over the air. That part is fitted per build, not ' +
+			'stripped from this one.';
 		$('limits-foot').textContent = 'Nothing here needs a reboot, and restarting the unit ' +
 			'resets none of it. When you are ready for an unlimited unit, ask for a production ' +
 			'licence.';
@@ -1754,8 +1759,14 @@ function dplAdvice() {
 		out.push('<b>On the tenant:</b> this device needs ' + TENANT_PROFILE[0] +
 			 '. Nothing on the unit or the platform warns when the two disagree.');
 	} else {
-		out.push('<b>On the tenant:</b> this device needs ' + TENANT_PROFILE[sat ? 1 : 0] +
-			 (d.encoding === 2 ? '' : ' — and a JSON or CBOR device wants the DEFAULT profile instead'));
+		/* [17 Sep 2026] This used to be keyed on the CLASS, so a TN unit with CoAP selected was
+		   told it needed "a DEFAULT profile, transport MQTT" while CoAP sat in the box above. The
+		   profile has to match the transport the unit will actually speak — that is the whole point
+		   of the pairing — so key it on the transport and let the encoding pick the payload type. */
+		out.push('<b>On the tenant:</b> this device needs a <b>CoAP</b> profile with a <b>' +
+			 (d.encoding === 2 ? 'protobuf' : d.encoding === 1 ? 'CBOR' : 'JSON') +
+			 '</b> payload. A profile binds the transport AND the payload, and nothing on the unit or ' +
+			 'the platform warns when the two disagree — a CoAP device on an MQTT profile simply never arrives.');
 	}
 	if (sat && d.encoding !== 2) {
 		out.push('<b>Encoding:</b> a class that includes satellite should be <b>protobuf</b>. ' +
@@ -1889,7 +1900,30 @@ $('b-netread').onclick = e => { e.stopPropagation(); readNet(false); };
 $('b-dplread').onclick = e => { e.stopPropagation(); readDpl(false); };
 $('b-netwrite').onclick = async e => { e.stopPropagation(); $('b-netwrite').disabled = true; await writeBlock('net'); $('b-netwrite').disabled = false; };
 $('b-dplwrite').onclick = async e => { e.stopPropagation(); $('b-dplwrite').disabled = true; await writeBlock('dpl'); $('b-dplwrite').disabled = false; };
-['n-a0', 'n-a1', 'n-a2'].forEach(id => { $(id).onclick = () => $(id).setAttribute('aria-pressed', $(id).getAttribute('aria-pressed') !== 'true'); });
+/*
+ * [17 Sep 2026] Unticking an access used to leave it standing in the Ladder rungs, so the write
+ * was refused — correctly — with "the order is not a permutation of the allowed accesses", and the
+ * developer was left to work out which of three dropdowns still named it. Untick now clears the rungs
+ * that named it, which is what the tick means. The ladder is a permutation of what is allowed; an
+ * access that is not allowed cannot be a rung, so there is nothing to preserve.
+ */
+['n-a0', 'n-a1', 'n-a2'].forEach((id, access) => {
+	$(id).onclick = () => {
+		const on = $(id).getAttribute('aria-pressed') !== 'true';
+		$(id).setAttribute('aria-pressed', on);
+		if (!on) {
+			let cleared = 0;
+			[0, 1, 2].forEach(i => {
+				const sel = $('n-ord' + i);
+				if (sel && String(sel.value) === String(access)) { sel.value = ''; cleared++; }
+			});
+			if (cleared) {
+				say('cleared ' + cleared + ' ladder rung(s) that named the access you just unticked \u2014 ' +
+				    'the unit refuses a ladder that is not a permutation of the allowed accesses');
+			}
+		}
+	};
+});
 [0, 1, 2].forEach(i => {
 	const sel = $('n-ord' + i);
 	sel.innerHTML = RUNG_OPT.map((o, k) => '<option value="' + (k ? k - 1 : '') + '">' + o + '</option>').join('');
@@ -2523,8 +2557,67 @@ async function readQuarantine(quiet) {
    is deliberately NOT done by packing an expected list here: the import has to go through the same
    validation and three-boot test as any other write, and doing it on the unit is what makes that
    true rather than hoped for. A rotating advertiser is left behind, and the note says so. */
+/*
+ * A confirm that belongs to the page. Deliberately not window.confirm: it is suppressible, it is
+ * styled by the browser rather than by us, and in an embedded view it may not appear at all — a
+ * destructive action must never be gated on a dialog that can silently not exist.
+ */
+function confirmDialog(title, body) {
+	return new Promise(resolve => {
+		let d = document.getElementById('confirm-dlg');
+
+		if (!d) {
+			d = document.createElement('dialog');
+			d.id = 'confirm-dlg';
+			d.innerHTML = '<form method="dialog"><h3 id="confirm-t"></h3>' +
+				'<p id="confirm-b" style="white-space:pre-wrap"></p>' +
+				'<div class="row" style="justify-content:flex-end;gap:8px">' +
+				'<button class="btn ghost" value="no">Cancel</button>' +
+				'<button class="btn" value="yes">Admit them</button></div></form>';
+			document.body.appendChild(d);
+		}
+		d.querySelector('#confirm-t').textContent = title;
+		d.querySelector('#confirm-b').textContent = body;
+		d.onclose = () => resolve(d.returnValue === 'yes');
+		if (typeof d.showModal === 'function') {
+			d.returnValue = 'no';
+			d.showModal();
+		} else if (typeof window.confirm === 'function') {
+			/* No <dialog> here. Ask the plainest question available rather than refusing outright:
+			   a developer who meant to admit should not be blocked by the browser's feature set. */
+			resolve(window.confirm(title + '\n\n' + body) === true);
+		} else {
+			resolve(false);   /* nothing can ask: refuse rather than admit by accident */
+		}
+	});
+}
+
 async function importQuarantine() {
 	const note = $('n-quar');
+
+	/*
+	 * [17 Sep 2026] One click used to spend the whole evaluation allowance. On the bench the
+	 * quarantine held 16 of 16 — strangers' phones — and the evaluation image admits ten devices for
+	 * the life of the unit, clearable five times only. The set survives a restart, so there is no
+	 * undo worth the name. A confirm that names the number is the least this can do; it is not a
+	 * substitute for a per-row admit, which is the real fix and is not built yet.
+	 */
+	{
+		const heard = parseInt(($('quar-count').textContent || '0'), 10) || 0;
+		const demo = /DEMO/i.test($('u-kind') ? $('u-kind').textContent : '');
+		if (heard > 0) {
+			const words = 'Admit all ' + heard + ' advertiser(s) this unit has heard?' +
+				(demo ? '\n\nThis is an evaluation unit: its set is ten devices for the unit\u2019s life, ' +
+					'it survives a restart, and it can be cleared five times in total. Anything in the ' +
+					'quarantine that is not yours \u2014 a passing phone, a neighbour\u2019s tag \u2014 ' +
+					'spends a slot permanently.' : '') +
+				'\n\nTo admit one named device instead, use the expected list above.';
+			if (!(await confirmDialog('Admit what I see', words))) {
+				note.textContent = 'nothing admitted';
+				return;
+			}
+		}
+	}
 
 	try {
 		await gattOp(() => wr(chars.exp, aclChunk(ACL_OP.IMPORT, 0, 0, null)), 'admit what I see');
@@ -2923,7 +3016,14 @@ function note(id, text, kind) {
 		text.replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c])) + '</p>';
 }
 
-let logLines = [], logDone = false;
+let logLines = [], logDone = false, logOnLine = null;
+/*
+ * [17 Sep 2026] The line handler used to be an anonymous listener added inside fetchLog(), and
+ * never removed. Fetch three times and every notification arrived three times: 64 real lines rendered
+ * as 192, measured on the bench. Worse than cosmetic — the duplicates crowd a shared, newest-first
+ * tail, and the half that gets crowded out is the cellular one, which has no other way to be read.
+ * One handler now, held here, attached before the fetch and detached at the end marker.
+ */
 
 function fmtLogAge(ms, nowMs) {
 	const d = Math.max(0, nowMs - ms);
@@ -2962,7 +3062,8 @@ async function fetchLog() {
 			(hdr.getUint32(LOG_OFF.DROPPED, true) ? ' \u00b7 ' + hdr.getUint32(LOG_OFF.DROPPED, true) + ' dropped' : '');
 
 		await gattOp(() => chars.log.startNotifications(), 'log notifications');
-		chars.log.addEventListener('characteristicvaluechanged', ev => {
+		if (logOnLine) chars.log.removeEventListener('characteristicvaluechanged', logOnLine);
+		logOnLine = ev => {
 			const dv = ev.target.value;
 
 			if (dv.byteLength < LOG_LINE.SIZE) return;
@@ -2973,6 +3074,15 @@ async function fetchLog() {
 				renderLog(nowMs);
 				gattOp(() => chars.log.stopNotifications(), 'log notifications off')
 					.catch(() => {});
+				chars.log.removeEventListener('characteristicvaluechanged', logOnLine);
+				logOnLine = null;
+				/* The count beside the list must describe THIS fetch. The header was read before the
+				 * cellular half's lines had crossed the link, so it can say 0 while 32 are on their
+				 * way — that is what taught a whole run that the half was dark. */
+				const peer = logLines.filter(l => l.src).length;
+				$('logt-st').textContent = logLines.length + ' line(s), ' + peer +
+					' from the cellular half' +
+					(peer === 0 ? ' \u2014 its lines fall off a shared tail the Bluetooth half fills fast; fetch again right after a cycle' : '');
 				note('n-logt', logLines.length + ' line(s), both halves, newest first', 'good');
 				return;
 			}
@@ -2980,7 +3090,8 @@ async function fetchLog() {
 			for (let i = 0; i < len && i < 90; i++) t += String.fromCharCode(dv.getUint8(LOG_LINE.TEXT + i));
 			logLines.push({ ms: dv.getUint32(LOG_LINE.MS, true), src: dv.getUint8(LOG_LINE.SRC), text: t });
 			renderLog(nowMs);
-		});
+		};
+		chars.log.addEventListener('characteristicvaluechanged', logOnLine);
 	} catch (e) {
 		note('n-logt', 'could not fetch the log: ' + explainWriteError(e), 'bad');
 	}
@@ -3302,8 +3413,25 @@ $('b-record').onclick = () => {
 	const rec = { when: iso(), unit: dev ? (dev.name || dev.id) : '', unitId: dev ? dev.id : '', label: written.label || $('i-label').value, identity: written.ident || $('i-ident').value, key: written.psk || '',
 		lat: s && s.hasPos ? fmt7(s.lat) : '', lon: s && s.hasPos ? fmt7(s.lon) : '', alt_m: s && s.hasPos ? (s.alt / 100).toFixed(1) : '', unc: s && s.hasPos ? s.unc : '', method: s ? METHOD_NAME[s.method] : '',
 		commissioned: s ? !!s.commissioned : false, fw: s ? fwStr(s.fw) : '', by: p.installer || '', site: p.site || '', profile: profileName, tool: 'commissioner v2' };
-	register.push(rec); store('blg20.register', register); renderRegister();
-	say('added <b>' + rec.identity + '</b> to the fleet register (' + register.length + ')', 'good');
+	/*
+	 * [17 Sep 2026] This appended unconditionally, and one bench session produced 35 identical
+	 * rows — the button is easy to press twice and said nothing about what it had already done. The
+	 * register is the only home of the commissioning key, so a duplicate is not harmless clutter: it
+	 * makes the file ambiguous about which row is the unit. Same unit and same identity now UPDATES
+	 * its row, and the page says which of the two things it did.
+	 */
+	const at = register.findIndex(r => (rec.unitId && r.unitId === rec.unitId) || (rec.identity && r.identity === rec.identity));
+	const dup = at >= 0;
+
+	if (dup) register[at] = rec; else register.push(rec);
+	store('blg20.register', register); renderRegister();
+	say((dup ? 'updated <b>' : 'added <b>') + rec.identity + '</b> in the fleet register (' +
+	    register.length + ' unit' + (register.length === 1 ? '' : 's') + ')', 'good');
+	/* The confirmation belongs where the button is, not only in the log panel at the foot of the page. */
+	const n = $('n-commission');
+	if (n) n.innerHTML = '<p class="note ok">' + (dup ? 'Updated' : 'Added') + ' <b>' +
+		rec.identity + '</b> in the fleet register \u2014 ' + register.length +
+		' unit(s). Export it: the credential in it exists nowhere else.</p>';
 	$('p-reg').classList.add('open');
 };
 $('reg-csv').onclick = e => { e.stopPropagation(); if (!register.length) return; const cols = Object.keys(register[0]); const esc = v => '"' + String(v ?? '').replace(/"/g, '""') + '"'; download('blg20-fleet-register-' + iso().slice(0, 10) + '.csv', [cols.join(','), ...register.map(r => cols.map(c => esc(r[c])).join(','))].join('\n'), 'text/csv'); say('register exported: ' + register.length + ' unit(s)'); };
