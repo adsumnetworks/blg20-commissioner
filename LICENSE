@@ -1,0 +1,42 @@
+Adsum Networks Commissioner Licence
+SPDX-License-Identifier: LicenseRef-Adsum-Commissioner
+
+Copyright (c) 2026 Adsum Networks. All rights reserved.
+
+This licence covers every file in this repository, including the commissioning pages served at
+commission.adsumnetworks.com.
+
+1. Why the source is visible
+   The source is published so that anyone can read exactly what the commissioner sends to and reads
+   from a gateway before trusting it with one. Publishing it does not make it open source, and no
+   right is granted except those stated below.
+
+2. What you may do
+   You may use the commissioner, as served by Adsum Networks at commission.adsumnetworks.com or as an
+   unmodified local copy of it, to commission, inspect and maintain gateways that run firmware from
+   Adsum Networks and that you own or are authorised to manage. You may read the source to understand
+   and assess that use.
+
+3. What you may not do
+   Without a written licence from Adsum Networks you may not:
+   (a) copy, host, publish or redistribute the commissioner or any part of it;
+   (b) modify it or create a derivative work from it;
+   (c) use it, or any part of it, with firmware that does not come from Adsum Networks;
+   (d) use its source, or the gateway interfaces it reveals, to build a commissioning tool, firmware
+       or service of your own or for anyone else;
+   (e) remove or alter this licence or any copyright or attribution notice.
+
+4. Hosting platforms
+   Where this repository is hosted on a platform whose terms let its users view or fork public
+   repositories, those terms apply only within that platform, and this licence grants nothing beyond
+   them.
+
+5. No warranty
+   The commissioner is provided "as is", without warranty of any kind, express or implied, including
+   fitness for a particular purpose and non-infringement. Adsum Networks is not liable for any damage
+   arising from its use, including damage to or misconfiguration of a gateway, to the extent the law
+   allows.
+
+6. Other terms
+   A licence agreement supplied by Adsum Networks supersedes this licence for the parties to it.
+   Terms for other uses are available on request: support@adsumnetworks.com.
