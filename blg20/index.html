@@ -1819,6 +1819,22 @@ async function refusalWords(fallback) {
 	return s.cfgReason ? (CFG_REASON[s.cfgReason] || ('reason ' + s.cfgReason)) : fallback;
 }
 
+/* One refusal, read in one pass. A reason from the unit often carries its remedy after an em
+   dash ("...outside the deployment class \u2014 open Network policy, untick satellite..."), and
+   bolding the whole string buried the fix inside three lines of bold and put two em dashes in
+   one sentence. Split at the FIRST dash: the reason is the headline, the remedy is its own line,
+   and the reassurance is one short sentence. A reason with no dash simply has no remedy line. */
+function refusalHTML(why) {
+	const esc = (t) => t.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+	const at = why ? why.search(/\s[\u2014\u2013-]\s/) : -1;
+	const reason = at < 0 ? why : why.slice(0, at);
+	let fix = at < 0 ? '' : why.slice(at).replace(/^\s[\u2014\u2013-]\s/, '');
+	if (fix) fix = fix.charAt(0).toUpperCase() + fix.slice(1);
+	return '<p class="note stop"><b>Refused' + (reason ? ': ' + esc(reason) : '') + '.</b> ' +
+		'The unit refused the write, so nothing on it changed.' +
+		(fix ? '<br><b>What to do.</b> ' + esc(fix) + '.' : '') + '</p>';
+}
+
 /* Compared through DataView getters on both sides rather than by making a Uint8Array of each.
    The buffer that comes back from a GATT read does not always belong to this realm - the same
    trap the test harness names - and a comparison that silently constructs an empty view would
@@ -1875,7 +1891,7 @@ async function writeBlock(kind) {
 	} catch (e) {
 		const why = await refusalWords(explainWriteError(e));
 		say(name + ' refused: ' + why, 'bad');
-		note.innerHTML += '<p class="note stop"><b>Refused: ' + why + '</b> — this is the unit protecting itself, not a fault. Nothing changed on it.</p>';
+		note.innerHTML += refusalHTML(why);
 		return false;
 	}
 	/* The write is not the proof; the read-back is. */
@@ -2055,7 +2071,7 @@ async function writeRules() {
 		const why = s2 && s2.rulesReason ? RULES_REASON[s2.rulesReason] || ('reason ' + s2.rulesReason)
 			: await refusalWords(explainWriteError(e));
 		say('rule set refused: ' + why, 'bad');
-		note.innerHTML += '<p class="note stop"><b>Refused: ' + why + '</b> \u2014 this is the unit protecting itself, not a fault. Nothing changed on it.</p>';
+		note.innerHTML += refusalHTML(why);
 		return false;
 	}
 	const back = parseRules(await gattOp(() => chars.rul.readValue(), 'rules read-back'));
@@ -3384,7 +3400,7 @@ $('b-commission').onclick = async () => {
 	} catch (e) {
 		const s = await readStatus(true); const why = s && REFUSAL[s.lastError];
 		say('commission refused' + (why ? ': ' + why : ': ' + explainWriteError(e)), 'bad');
-		$('n-commission').innerHTML = '<p class="note stop"><b>Refused' + (why ? ': ' + why : '') + '</b> — this is the unit protecting itself, not a fault.</p>';
+		$('n-commission').innerHTML = refusalHTML(why);
 		$('b-commission').disabled = false;
 	}
 };
