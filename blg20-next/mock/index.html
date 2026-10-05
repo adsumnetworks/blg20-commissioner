@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<!--
+  BLG20 Commissioner — Simple / Advanced MOCKUP (5 Oct 2026). Not connected to anything.
+  Every value on this page is invented, so the layout and the words can be judged before any of it
+  is built. Copyright (c) 2026 Adsum Networks. All rights reserved.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Commissioner mockup</title>
+<style>
+	:root{
+		--ground:#f4f6f7; --surface:#ffffff; --ink:#15191c; --muted:#5a656e; --faint:#8c969e;
+		--rule:#dde3e7; --rule-soft:#e9eef1; --chip:#eef2f4; --well:#f0f3f5;
+		--coral:#c05a38; --cyan:#00728a; --cyan-edge:#0099bb; --cyan-wash:#e6f4f8; --cyan-ink:#fff;
+		--go:#2f6b46; --go-wash:#e9f4ee; --warn:#8a6410; --warn-wash:#fbf3df; --stop:#b3402a; --stop-wash:#fbebe7;
+		--sans:-apple-system,"SF Pro Text","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+		--mono:ui-monospace,"SF Mono",Menlo,Consolas,"Roboto Mono",monospace; --tap:48px;
+	}
+	@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+		--ground:#0f1315; --surface:#181d20; --ink:#e8ecee; --muted:#9ba6ad; --faint:#6e7981;
+		--rule:#2a3236; --rule-soft:#22292d; --chip:#232a2e; --well:#1e2427;
+		--coral:#e58a68; --cyan:#4cc4dd; --cyan-edge:#00a9ce; --cyan-wash:#132329; --cyan-ink:#0b1417;
+		--go:#6fbf8f; --go-wash:#16241c; --warn:#d9a441; --warn-wash:#26200f; --stop:#e8836a; --stop-wash:#2a1a16;
+	}}
+	*{box-sizing:border-box} [hidden]{display:none!important}
+	body{margin:0;background:var(--ground);color:var(--ink);font:16px/1.5 var(--sans)}
+	.wrap{max-width:640px;margin:0 auto;padding:0 14px 60px}
+	.top{position:sticky;top:0;z-index:5;background:var(--surface);border-bottom:1px solid var(--rule);padding:10px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+	.brand{font-weight:700} .brand small{display:block;color:var(--coral);font:600 10.5px/1.3 var(--sans);letter-spacing:.12em;text-transform:uppercase}
+	.mode{margin-left:auto;display:inline-flex;border:1px solid var(--rule);border-radius:999px;overflow:hidden}
+	.mode button{border:0;background:var(--well);color:var(--muted);font:600 13.5px var(--sans);padding:8px 14px;min-height:40px;cursor:pointer}
+	.mode button[aria-pressed="true"]{background:var(--cyan);color:var(--cyan-ink)}
+	.pill{display:inline-block;padding:3px 9px;border-radius:999px;font:600 12px/1.4 var(--sans);border:1px solid currentColor}
+	.pill.go{color:var(--go);background:var(--go-wash)} .pill.warn{color:var(--warn);background:var(--warn-wash)} .pill.dim{color:var(--faint);background:var(--chip);border-color:var(--rule)} .pill.cy{color:var(--cyan);background:var(--cyan-wash)}
+	.mock{background:var(--warn-wash);border:1px dashed var(--warn);color:var(--ink);border-radius:9px;padding:8px 12px;font-size:13.5px;margin:14px 0}
+	h1{font-size:24px;margin:18px 0 4px} .lede{color:var(--muted);margin:0 0 14px}
+	.progress{display:flex;gap:6px;margin:4px 0 14px} .progress i{flex:1;height:6px;border-radius:3px;background:var(--rule)} .progress i.done{background:var(--go)} .progress i.now{background:var(--cyan)}
+	.card{background:var(--surface);border:1px solid var(--rule);border-radius:12px;margin:12px 0;padding:14px 16px}
+	.card.off{opacity:.5} .card.did{border-color:var(--go)}
+	.card h2{font-size:18px;margin:0 0 4px;display:flex;gap:10px;align-items:center}
+	.card h2 .n{width:28px;height:28px;border-radius:50%;background:var(--chip);color:var(--muted);font:700 14px/28px var(--mono);text-align:center;flex:none}
+	.card.on h2 .n{background:var(--cyan);color:var(--cyan-ink)} .card.did h2 .n{background:var(--go);color:#fff}
+	.card p{margin:0 0 10px;color:var(--muted);font-size:14.5px}
+	.btn{min-height:var(--tap);padding:0 18px;border-radius:10px;border:1px solid var(--cyan);background:var(--cyan);color:var(--cyan-ink);font:700 15px var(--sans);cursor:pointer;width:100%}
+	.btn.quiet{background:transparent;color:var(--cyan)} .btn.danger{background:transparent;color:var(--stop);border-color:var(--stop)}
+	.btn:disabled{opacity:.45;cursor:not-allowed}
+	.row{display:flex;gap:10px;flex-wrap:wrap} .row>*{flex:1 1 140px}
+	input[type=text]{min-height:var(--tap);padding:0 12px;border:1px solid var(--rule);border-radius:10px;background:var(--well);color:var(--ink);font:16px var(--sans);width:100%}
+	label.f{display:block;font:600 12px/1 var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:10px 0 6px}
+	.big{font:700 30px/1.1 var(--mono);letter-spacing:.14em;background:var(--well);border:1px solid var(--rule);border-radius:10px;padding:6px 12px;display:inline-block}
+	.ok{color:var(--go);font-weight:700} .bad{color:var(--stop);font-weight:700} .meh{color:var(--warn);font-weight:700}
+	ul.sensors{list-style:none;margin:8px 0 10px;padding:0;border:1px solid var(--rule-soft);border-radius:10px;overflow:hidden}
+	ul.sensors li{display:flex;gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--rule-soft);font-size:14.5px}
+	ul.sensors li:last-child{border-bottom:0} ul.sensors input{width:22px;height:22px;flex:none}
+	ul.sensors .m{margin-left:auto;font:12.5px var(--mono);color:var(--faint);text-align:right}
+	ul.health{list-style:none;margin:8px 0 0;padding:0} ul.health li{display:flex;gap:10px;padding:7px 0;border-bottom:1px dashed var(--rule-soft);font-size:14.5px} ul.health li b{min-width:110px}
+	details.card summary{cursor:pointer;font-weight:700;min-height:28px;list-style:none} details.card summary::before{content:"▸ ";color:var(--faint)} details.card[open] summary::before{content:"▾ "}
+	.note{border-radius:9px;padding:9px 12px;font-size:14px;border:1px solid var(--cyan-edge);background:var(--cyan-wash);margin:8px 0}
+	.note.warn{border-color:var(--warn);background:var(--warn-wash)} .note.go{border-color:var(--go);background:var(--go-wash)}
+	.adv .panel{background:var(--surface);border:1px solid var(--rule);border-radius:10px;margin:8px 0;padding:12px 16px;font-weight:700;display:flex;justify-content:space-between}
+	.adv .panel small{font-weight:500;color:var(--muted)}
+	.why{font-size:13px;color:var(--muted);margin-top:18px}
+</style>
+</head>
+<body>
+<div class="top">
+	<div class="brand">BLG20 Commissioner<small>mockup · 5 Oct 2026</small></div>
+	<div class="mode" role="group" aria-label="Mode">
+		<button id="m-simple" aria-pressed="true">Simple</button>
+		<button id="m-adv" aria-pressed="false">Advanced</button>
+	</div>
+	<div style="width:100%;display:flex;gap:6px;flex-wrap:wrap" aria-live="polite">
+		<span class="pill dim" id="p-unit">no unit</span><span class="pill dim" id="p-state">—</span>
+	</div>
+</div>
+
+<div class="wrap">
+<div class="mock"><b>Mockup.</b> Nothing here talks to a real unit; every value is invented. Click through it to judge the steps and the words. The <b>Simple / Advanced</b> switch is top right.</div>
+
+<!-- ───────────────────────── SIMPLE ───────────────────────── -->
+<section id="simple" aria-label="Simple mode">
+<h1>Set up a gateway</h1>
+<p class="lede">Five steps, about three minutes. Stand next to the unit.</p>
+<div class="progress" aria-hidden="true"><i id="g1"></i><i id="g2"></i><i id="g3"></i><i id="g4"></i><i id="g5"></i></div>
+
+<div class="card on" id="c1">
+	<h2><span class="n">1</span>Find the unit</h2>
+	<p>Pick the gateway you are standing next to. When asked, type its passkey.</p>
+	<button class="btn" id="b1">Connect</button>
+	<div id="o1"></div>
+</div>
+
+<div class="card off" id="c2">
+	<h2><span class="n">2</span>Where is it?</h2>
+	<p>Its position goes into every reading. Use this phone's location, standing at the unit.</p>
+	<div class="row"><button class="btn" id="b2" disabled>Use my location</button><button class="btn quiet" id="b2t" disabled>Type it instead</button></div>
+	<div id="t2" hidden><label class="f" for="i-ll">Latitude, longitude</label><input type="text" id="i-ll" placeholder="36.64565, 2.76095"></div>
+	<div id="o2"></div>
+</div>
+
+<div class="card off" id="c3">
+	<h2><span class="n">3</span>Name it</h2>
+	<p>The name you will see on the dashboard. The unit's key is made for you and saved to this phone's register.</p>
+	<label class="f" for="i-name">Name</label>
+	<input type="text" id="i-name" value="depot-north-004" disabled>
+	<div style="margin-top:10px"><button class="btn" id="b3" disabled>Save the name</button></div>
+	<div id="o3"></div>
+</div>
+
+<div class="card off" id="c4">
+	<h2><span class="n">4</span>Which sensors are yours?</h2>
+	<p>The unit only stores sensors on its list. These are the ones it hears right now. Untick any that are not yours.</p>
+	<ul class="sensors" id="sens" hidden>
+		<li><input type="checkbox" checked aria-label="Cold room 1"><span>Temperature tag</span><span class="m">C3:1A:…:42<br>−58 dBm</span></li>
+		<li><input type="checkbox" checked aria-label="Cold room 2"><span>Temperature tag</span><span class="m">C3:1A:…:57<br>−63 dBm</span></li>
+		<li><input type="checkbox" checked aria-label="Door"><span>Door contact</span><span class="m">E8:02:…:9B<br>−71 dBm</span></li>
+		<li><input type="checkbox" aria-label="Unknown phone"><span>Unknown (a phone?)</span><span class="m">4F:…:11 rotating<br>−80 dBm</span></li>
+	</ul>
+	<button class="btn" id="b4" disabled>Accept the ticked sensors</button>
+	<div id="o4"></div>
+</div>
+
+<div class="card off" id="c5">
+	<h2><span class="n">5</span>Finish</h2>
+	<p>Starts the unit, then checks that everything works.</p>
+	<button class="btn" id="b5" disabled>Finish and check</button>
+	<div id="o5"></div>
+</div>
+
+<details class="card">
+	<summary>Server (optional)</summary>
+	<p style="margin-top:8px">Only if your installer gave you a server address or a device token. Otherwise the unit uses its built-in defaults.</p>
+	<label class="f" for="i-srv">Server address</label><input type="text" id="i-srv" placeholder="leave empty for the default">
+	<label class="f" for="i-tok">Device token</label><input type="text" id="i-tok" placeholder="leave empty to keep the current one">
+</details>
+
+<details class="card">
+	<summary>More</summary>
+	<div class="row" style="margin-top:10px">
+		<button class="btn quiet">Find this unit (flash its lights)</button>
+		<button class="btn danger">Take it out of service…</button>
+	</div>
+	<p class="why" style="margin-top:10px">Everything else (network choices, rules, scan timing, sessions, logs, self-test, lights) is in <b>Advanced</b>. Simple never changes those: it leaves the unit's defaults, or what an expert set, as they are.</p>
+</details>
+</section>
+
+<!-- ───────────────────────── ADVANCED ───────────────────────── -->
+<section id="adv" class="adv" aria-label="Advanced mode" hidden>
+<h1>Commission a gateway</h1>
+<p class="lede">Advanced is the full page as it is today: every panel, every setting. In the real page this mode is the current commissioner, unchanged.</p>
+<div class="panel">Pre-flight <small>all clear</small></div>
+<div class="panel">Site profile <small>default</small></div>
+<div class="panel">1 · Find the unit <small>Connect · pairing help per OS</small></div>
+<div class="panel">Status <small>13 groups, every 5 s</small></div>
+<div class="panel">2 · State the position <small>fix · typed · surveyed</small></div>
+<div class="panel">3 · Name and credential <small>label · identity · key</small></div>
+<div class="panel">4 · Commission</div>
+<div class="panel">5 · Verify and register</div>
+<div class="panel">Network policy <small>LTE-M · NB-IoT · satellite · PLMN · bands</small></div>
+<div class="panel">Deployment class <small>TN/NTN · CoAP/MQTT · encoding · endpoint · APN · token</small></div>
+<div class="panel">Rules <small>up to 16</small></div>
+<div class="panel">Scan options <small>window · interval · RSSI · PHY</small></div>
+<div class="panel">Sessions and device credentials</div>
+<div class="panel">Access <small>rules · expected devices · quarantine</small></div>
+<div class="panel">Log · Self-test · Decommission</div>
+<div class="panel">Advanced parameters <small>timing · lights · commands</small></div>
+<div class="panel">Fleet register · What happened · Lights · About</div>
+</section>
+
+<p class="why"><b>What Simple hides, and why it is safe.</b> Simple writes only: the position, the label, an auto-made identity and key, the accepted sensors, and (if filled) the server and token. It reads the unit first, and if an expert already set rules or network choices it says "3 rules set in Advanced" and leaves them alone. The choice of mode is remembered on this phone.</p>
+</div>
+
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const wait = ms => new Promise(r => setTimeout(r, ms));
+function stage(n) {
+	for (let i = 1; i <= 5; i++) {
+		const c = $('c' + i), g = $('g' + i);
+		c.className = 'card ' + (i < n ? 'did' : i === n ? 'on' : 'off');
+		g.className = i < n ? 'done' : i === n ? 'now' : '';
+	}
+	$('b2').disabled = $('b2t').disabled = n !== 2;
+	$('i-name').disabled = $('b3').disabled = n !== 3;
+	$('b4').disabled = n !== 4; $('b5').disabled = n !== 5;
+	if (n === 4) $('sens').hidden = false;
+}
+function setMode(m) {
+	$('simple').hidden = m !== 'simple'; $('adv').hidden = m !== 'adv';
+	$('m-simple').setAttribute('aria-pressed', m === 'simple'); $('m-adv').setAttribute('aria-pressed', m === 'adv');
+	try { localStorage.setItem('blg20.mode.mock', m); } catch (_) {}
+}
+$('m-simple').onclick = () => setMode('simple'); $('m-adv').onclick = () => setMode('adv');
+try { const m = localStorage.getItem('blg20.mode.mock'); if (m === 'adv') setMode('adv'); } catch (_) {}
+
+$('b1').onclick = async () => {
+	$('b1').disabled = true; $('b1').textContent = 'Connecting…';
+	$('o1').innerHTML = '<p class="note">Passkey for <b>Adsum BLG20 D4F43C8EB825</b>:<br><span class="big">263242</span><br>Type it when your phone asks.</p>';
+	await wait(1300);
+	$('b1').textContent = 'Connected ✓';
+	$('o1').innerHTML = '<p class="note go">Connected to <b>Adsum BLG20 D4F43C8EB825</b>. New unit, not set up yet.</p>';
+	$('p-unit').textContent = 'D4F4…B825'; $('p-unit').className = 'pill cy'; $('p-state').textContent = 'not set up'; $('p-state').className = 'pill warn';
+	stage(2);
+};
+$('b2t').onclick = () => { $('t2').hidden = false; };
+$('b2').onclick = async () => {
+	$('b2').disabled = true; $('b2').textContent = 'Finding you…';
+	await wait(1100);
+	$('o2').innerHTML = '<p class="note go"><b>36.64565, 2.76095</b> · accurate to <b>6 m</b> (GPS) · saved on the unit ✓</p>';
+	stage(3);
+};
+$('b3').onclick = async () => {
+	$('b3').disabled = true; await wait(700);
+	$('o3').innerHTML = '<p class="note go">Named <b>' + ($('i-name').value || 'unit') + '</b> · key made and saved to this phone\'s register ✓<br><small>You will be asked to export the register at the end.</small></p>';
+	stage(4);
+};
+$('b4').onclick = async () => {
+	const n = [...document.querySelectorAll('#sens input')].filter(x => x.checked).length;
+	$('b4').disabled = true; await wait(800);
+	$('o4').innerHTML = '<p class="note go"><b>' + n + ' sensors</b> accepted ✓. New sensors later: come back here, or the platform can add them.</p>';
+	stage(5);
+};
+$('b5').onclick = async () => {
+	$('b5').disabled = true; $('b5').textContent = 'Starting and checking…';
+	await wait(1600);
+	$('b5').textContent = 'Done ✓';
+	$('o5').innerHTML = '<ul class="health">' +
+		'<li><b>Bluetooth</b><span class="ok">✓ connected, settings saved</span></li>' +
+		'<li><b>Cellular half</b><span class="ok">✓ answering, has the position</span></li>' +
+		'<li><b>Network</b><span class="meh">… searching (LTE-M). Can take 2 minutes; you can leave</span></li>' +
+		'<li><b>Sensors</b><span class="ok">✓ 3 of 3 heard in the last minute</span></li>' +
+		'<li><b>Saved</b><span class="ok">✓ in this phone\'s register</span></li></ul>' +
+		'<div class="row" style="margin-top:12px"><button class="btn">Export the register</button><button class="btn quiet">Set up the next unit</button></div>';
+	$('p-state').textContent = 'set up ✓'; $('p-state').className = 'pill go';
+	for (let i = 1; i <= 5; i++) { $('c' + i).className = 'card did'; $('g' + i).className = 'done'; }
+};
+</script>
+</body>
+</html>
