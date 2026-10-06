@@ -1135,7 +1135,9 @@ function load(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.p
 
 /* ───────────────────────── log ───────────────────────── */
 const LOG = [];
+let badSaid = 0;       /* how many 'bad' lines so far: readAck() tells a failed read by it */
 function say(text, kind) {
+	if (kind === 'bad') badSaid++;
 	const ol = $('log');
 	if (ol.children.length === 1 && ol.firstElementChild.textContent === 'Waiting to connect.') ol.innerHTML = '';
 	const li = document.createElement('li'); if (kind) li.className = kind;
@@ -2187,23 +2189,49 @@ function sameBytes(buf, dv, skip) {
 	return true;
 }
 
+/* 6 Oct 2026 (Omar): "Read from the unit does nothing". It did read, but its only answer was a
+   line in the log at the bottom of the page, and when the unit held what the form already showed
+   nothing on screen moved. A read the installer asked for now answers in the panel, with the time,
+   what changed on the form, and the configuration version it came from. */
+function readNote(id, what, changed, err) {
+	const t = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+	const v = lastSta2 ? ' · configuration v' + n0(lastSta2.cfgVer) + ((lastSta2.cfgFlags & 0x01) ? ' (ON TEST)' : '') : '';
+	$(id).innerHTML = err
+		? '<p class="note stop"><b>Could not read the ' + what + '.</b> ' + err + '</p>'
+		: '<p class="note go"><b>Read from the unit at ' + t + '.</b> ' +
+		  (changed ? 'The form now shows what the unit holds: ' + changed + ' field(s) changed.' : 'The form already matched what the unit holds.') + v + '</p>';
+}
+const formSnap = sel => [...document.querySelectorAll(sel)].map(e => e.getAttribute('aria-pressed') ?? e.value);
+const diffCount = (a, b) => a.reduce((n, x, i) => n + (x !== b[i] ? 1 : 0), 0);
+const NET_FIELDS = '#p-net .bd input, #p-net .bd select, #p-net .bd .seg button';
+const DPL_FIELDS = '#p-dpl .bd input, #p-dpl .bd select';
 async function readNet(quiet) {
-	if (!chars.net) return null;
+	if (!chars.net) { if (!quiet) readNote('n-netnote', 'network policy', 0, 'Connect to the unit first.'); return null; }
 	try {
+		const before = formSnap(NET_FIELDS);
 		const n = parseNet(await gattOp(() => chars.net.readValue(), 'net'));
 		lastNet = n; netToForm(n);
-		if (!quiet) say('network policy read from the unit');
+		if (!quiet) { say('network policy read from the unit'); readNote('n-netnote', 'network policy', diffCount(before, formSnap(NET_FIELDS))); }
 		return n;
-	} catch (e) { say('could not read the network policy: ' + explainWriteError(e), 'bad'); return null; }
+	} catch (e) {
+		say('could not read the network policy: ' + explainWriteError(e), 'bad');
+		if (!quiet) readNote('n-netnote', 'network policy', 0, explainWriteError(e));
+		return null;
+	}
 }
 async function readDpl(quiet) {
-	if (!chars.dpl) return null;
+	if (!chars.dpl) { if (!quiet) readNote('n-dplnote', 'deployment class', 0, 'Connect to the unit first.'); return null; }
 	try {
+		const before = formSnap(DPL_FIELDS);
 		const d = parseDpl(await gattOp(() => chars.dpl.readValue(), 'dpl'));
 		lastDpl = d; dplToForm(d);
-		if (!quiet) say('deployment class read from the unit');
+		if (!quiet) { say('deployment class read from the unit'); readNote('n-dplnote', 'deployment class', diffCount(before, formSnap(DPL_FIELDS))); }
 		return d;
-	} catch (e) { say('could not read the deployment class: ' + explainWriteError(e), 'bad'); return null; }
+	} catch (e) {
+		say('could not read the deployment class: ' + explainWriteError(e), 'bad');
+		if (!quiet) readNote('n-dplnote', 'deployment class', 0, explainWriteError(e));
+		return null;
+	}
 }
 
 async function writeBlock(kind) {
@@ -2251,6 +2279,22 @@ async function writeBlock(kind) {
 	return true;
 }
 
+/* Every other "Read" button answers beside itself the same way (6 Oct): a pill with the time on
+   success, or "read failed" when the read put a bad line in the log. */
+function readAck(id, fn) {
+	const btn = $(id);
+	btn.onclick = async e => {
+		e.stopPropagation();
+		let pill = btn.parentElement.querySelector('.readack');
+		if (!pill) { pill = document.createElement('span'); pill.className = 'readack pill dim'; btn.after(pill); }
+		if (!chars.sta) { pill.className = 'readack pill warn'; pill.textContent = 'connect first'; return; }
+		const b0 = badSaid; btn.disabled = true; pill.className = 'readack pill dim'; pill.textContent = 'reading…';
+		try { await fn(false); } finally { btn.disabled = false; }
+		const ok = badSaid === b0;
+		pill.className = 'readack pill ' + (ok ? 'go' : 'stop');
+		pill.textContent = ok ? 'read from the unit ✓ ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'read failed: see the message below';
+	};
+}
 $('b-netread').onclick = e => { e.stopPropagation(); readNet(false); };
 $('b-dplread').onclick = e => { e.stopPropagation(); readDpl(false); };
 $('b-netwrite').onclick = async e => { e.stopPropagation(); $('b-netwrite').disabled = true; await writeBlock('net'); $('b-netwrite').disabled = false; };
@@ -3258,7 +3302,7 @@ async function writeDcred(op) {
 }
 
 $('b-scanwrite').onclick = async e => { e.stopPropagation(); $('b-scanwrite').disabled = true; await writeScan(); $('b-scanwrite').disabled = false; };
-$('b-scanread').onclick = e => { e.stopPropagation(); readScan(false); };
+readAck('b-scanread', readScan);
 
 /* ---- M7 WP3: the Access panel's buttons ---- */
 $('b-acladd').onclick = e => { e.stopPropagation(); aclRules.push(aclBlank()); aclSel = aclRules.length - 1; renderAclRules(); };
@@ -3273,10 +3317,10 @@ $('b-acldown').onclick = e => {
 	if (aclSel >= 0 && aclSel < aclRules.length - 1) { const r = aclRules.splice(aclSel, 1)[0]; aclRules.splice(++aclSel, 0, r); renderAclRules(); }
 };
 $('b-aclwrite').onclick = async e => { e.stopPropagation(); $('b-aclwrite').disabled = true; await writeAcl(); $('b-aclwrite').disabled = false; };
-$('b-aclread').onclick = e => { e.stopPropagation(); readAcl(false); };
+readAck('b-aclread', readAcl);
 $('b-expwrite').onclick = async e => { e.stopPropagation(); $('b-expwrite').disabled = true; await writeExpected(); $('b-expwrite').disabled = false; };
-$('b-expread').onclick = e => { e.stopPropagation(); readExpected(false); };
-$('b-quarread').onclick = e => { e.stopPropagation(); readQuarantine(false); };
+readAck('b-expread', readExpected);
+readAck('b-quarread', readQuarantine);
 $('b-quarimport').onclick = async e => { e.stopPropagation(); $('b-quarimport').disabled = true; await importQuarantine(); $('b-quarimport').disabled = false; };
 $('b-quarclear').onclick = async e => {
 	e.stopPropagation();
@@ -3287,7 +3331,7 @@ $('b-quarclear').onclick = async e => {
 	} catch (err) { say('could not clear the quarantine: ' + explainWriteError(err), 'bad'); }
 };
 $('b-sesswrite').onclick = async e => { e.stopPropagation(); $('b-sesswrite').disabled = true; await writeSession(0); $('b-sesswrite').disabled = false; };
-$('b-sessread').onclick = e => { e.stopPropagation(); readSession(false); };
+readAck('b-sessread', readSession);
 $('b-sessdel').onclick = async e => { e.stopPropagation(); await writeSession(1); };
 $('b-sesschradd').onclick = e => {
 	e.stopPropagation();
@@ -3559,13 +3603,13 @@ $('b-logcopy').onclick = e => {
 	navigator.clipboard.writeText(logLines.map(l => (l.src ? 'LTE | ' : 'BLE | ') + l.text).join('\n'))
 		.then(() => say('log copied')).catch(() => say('could not copy', 'warn'));
 };
-$('b-slfread').onclick = e => { e.stopPropagation(); readSelftest(false); };
+readAck('b-slfread', readSelftest);
 $('dx-confirm').oninput = () => {
 	$('b-decom').disabled = ($('dx-confirm').value || '').replace(/[^0-9a-fA-F]/g, '').length !== 4;
 };
 $('b-decom').onclick = e => { e.stopPropagation(); decommission(); };
 $('b-ruleswrite').onclick = async e => { e.stopPropagation(); $('b-ruleswrite').disabled = true; await writeRules(); $('b-ruleswrite').disabled = false; };
-$('b-rulesread').onclick = e => { e.stopPropagation(); readRules(false); };
+readAck('b-rulesread', readRules);
 $('b-ruleadd').onclick = e => {
 	e.stopPropagation();
 	const used = [...document.querySelectorAll('#rules-body [data-k="id"]')].map(i => Number(i.value));
@@ -3588,7 +3632,7 @@ $('b-ruleadd').onclick = e => {
    ready        connected and paired: the only state in which the panels are live
    reconnecting the link dropped unexpectedly; trying again on its own for 30 s
    lost         not connected; the panels show what the unit said last, dimmed */
-const BUILD = 'staging · 6 Oct 2026 · issue 7 · Simple mode + connection fixes';
+const BUILD = 'staging · 6 Oct 2026 · issue 8 · Simple mode + connection fixes';
 let link = 'idle', linkGen = 0, readyAt = 0, staleHits = 0, lastPairWhy = 'first';
 let expectLoss = null;          // { why: 'user' | 'reboot' | 'wipe' | 'wipe-reboot', until: ms }
 let retry = null;               // { until: ms, timer, n }
