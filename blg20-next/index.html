@@ -1376,9 +1376,9 @@ async function readStatus(quiet, ms) {
 	try {
 		const dv = await gattOp(() => chars.sta.readValue(), 'status', ms);
 		const s = parseStatus(dv); renderStatus(s); lastReadError = null;
-		if (!quiet) say('unit reports: position ' + (s.hasPos ? 'set' : 'missing') + ', credential ' + (s.hasCred ? 'held' : 'missing') + ', ' + (s.commissioned ? 'commissioned' : 'not commissioned') + ', ' + fwStr(s.fw), s.commissioned ? 'good' : null);
+		if (!quiet || quiet === 'nofail') say('unit reports: position ' + (s.hasPos ? 'set' : 'missing') + ', credential ' + (s.hasCred ? 'held' : 'missing') + ', ' + (s.commissioned ? 'commissioned' : 'not commissioned') + ', ' + fwStr(s.fw), s.commissioned ? 'good' : null);
 		return s;
-	} catch (e) { lastReadError = e; if (quiet !== 'silent') say('could not read status: ' + explainWriteError(e), 'bad'); return null; }
+	} catch (e) { lastReadError = e; if (quiet !== 'silent' && quiet !== 'nofail') say('could not read status: ' + explainWriteError(e), 'bad'); return null; }
 }
 
 
@@ -3632,7 +3632,7 @@ $('b-ruleadd').onclick = e => {
    ready        connected and paired: the only state in which the panels are live
    reconnecting the link dropped unexpectedly; trying again on its own for 30 s
    lost         not connected; the panels show what the unit said last, dimmed */
-const BUILD = 'staging · 6 Oct 2026 · issue 9 · Simple mode + connection fixes';
+const BUILD = 'staging · 6 Oct 2026 · issue 10 · Simple mode + connection fixes';
 let link = 'idle', linkGen = 0, readyAt = 0, staleHits = 0, lastPairWhy = 'first';
 let expectLoss = null;          // { why: 'user' | 'reboot' | 'wipe' | 'wipe-reboot', until: ms }
 let retry = null;               // { until: ms, timer, n }
@@ -3653,10 +3653,11 @@ function linkWords(state, why) {
 		'<button class="btn sm ghost" onclick="stopRetry(\'Stopped trying.\')">Stop</button>';
 	if (state === 'lost') return '<b>Not connected.</b> ' + (why ? why + ' ' : '') + 'Everything below is what ' + name +
 		' said last, dimmed. <button class="btn sm" onclick="reconnectNow()">Reconnect</button>';
-	/* Windows and Linux pair in the system, never in the browser (6 Oct, Omar W1: Windows' own
-	   "Add device" pop-up appears here, and a PIN typed into it does not pair this unit). */
+	/* Windows and Linux pair in the system, never in the browser. On Windows an unpaired link
+	   fails in under a second and Windows then offers its own "Add device" pop-up (seen on the
+	   XIAO, 6 Oct): that pop-up IS Windows pairing, and pairing there works. */
 	if (state === 'pairing' && (platform() === 'windows' || platform() === 'linux')) return 'Connected to ' + name +
-		'. Checking that ' + OS_NAME[platform()] + ' has paired it… If a Windows <b>Add device</b> pop-up appears, ignore it: if the unit is not paired, the steps appear here in a few seconds.';
+		'. Checking that ' + OS_NAME[platform()] + ' has paired it…';
 	if (state === 'pairing') return 'Connected to ' + name + '. Waiting for pairing: type the passkey <b>' +
 		(passkeyFromName(dev && dev.name) || 'from the label') + '</b> when ' + (platform() === 'android' ? 'Android' : 'the system') + ' asks.';
 	if (state === 'connecting') return 'Connecting to ' + name + '…';
@@ -3746,7 +3747,7 @@ async function openLink(kind) {
 		/* 90 s where a person types the passkey into the browser's prompt; 12 s on Windows and
 		   Linux, where nobody does - an unpaired link there only ever waits for nothing. */
 		const sysPair = platform() === 'windows' || platform() === 'linux';
-		const s = await readStatus(auto ? 'silent' : false, sysPair ? 12000 : 90000);
+		const s = await readStatus(auto ? 'silent' : 'nofail', sysPair ? 12000 : 90000);   // a failure is said once, below
 		if (gen !== linkGen) return false;
 		if (!s) throw lastReadError || new Error('the unit could not be read');
 		readyAt = Date.now(); staleHits = 0;
@@ -3778,14 +3779,19 @@ async function openLink(kind) {
 			return false;
 		}
 		if (auto) return false;            // the retry loop decides what to say
-		say('could not connect: ' + explainWriteError(e), 'bad');
 		const os0 = platform();
+		const sysUnpaired = (os0 === 'windows' || os0 === 'linux') && opened && ['not-paired', 'auth-failed', 'auth-cancelled', 'unknown', 'dropped', 'timeout', 'unreachable'].includes(k);
+		say(sysUnpaired ? 'could not connect: ' + OS_NAME[os0] + ' has not paired this unit (Chrome said: ' + ((e && e.message) || e) + '). The card under Connect shows how.'
+			: 'could not connect: ' + explainWriteError(e), 'bad');
 		/* 6 Oct (Omar, W1): "paired before" is only this page's memory. The unit may have been
 		   wiped or reflashed and Windows may have forgotten it since, so on Windows and Linux ANY
 		   failure to reach a first answer gets the one card that covers both cases: remove it if
 		   listed, then pair it in the system. Before this a stale memory gave "Not connected" and
 		   nothing else. */
-		if ((os0 === 'windows' || os0 === 'linux') && opened && ['not-paired', 'auth-failed', 'auth-cancelled', 'unknown', 'dropped', 'timeout'].includes(k)) {
+		/* 'unreachable' too: Chrome on Windows reopens the link for the first read and reports a
+		   refused pairing as "Connection Error: Connection attempt failed" (reproduced on the
+		   XIAO; the unit logs "pairing failed: unspecified" < 1 s after the passkey request). */
+		if (sysUnpaired) {
 			forgetPaired(unitAddr());
 			showPairHelp('failed');
 		} else if (k === 'not-paired' || k === 'auth-failed' || k === 'unknown') {
@@ -3850,6 +3856,23 @@ async function retryOnce() {
 	retry = null;
 	setLink('lost', 'Could not reach the unit for 30 s. Walk back to it and press Reconnect. A commissioned unit stops advertising 5 minutes after the last disconnect: hold its button 3–8 s to reopen the window.');
 }
+/* Straight after Windows pairs a unit, Chrome's first link to it can die during discovery
+   ("GATT Server is disconnected. Cannot retrieve services") while Windows settles the new keys;
+   the next try works (measured on the XIAO, 6 Oct). So "I paired it" tries three times before it
+   shows the card again. */
+async function connectAfterPairing() {
+	if (!dev) { chooseAndConnect(); return; }
+	stopRetryTimer(); retry = null;
+	const a = unitAddr();
+	for (let i = 0; i < 3; i++) {
+		staleHits = 0;
+		if (await openLink('connect')) return;
+		if (link === 'ready' || i === 2) return;
+		$('n-pair').innerHTML = ''; markPaired(a);
+		say('the link dropped straight after pairing (Windows settling the new pairing) — trying again');
+		await new Promise(r => setTimeout(r, 1500));
+	}
+}
 function reconnectNow() {
 	if (!dev) { chooseAndConnect(); return; }
 	stopRetryTimer(); retry = null; staleHits = 0;
@@ -3877,7 +3900,8 @@ function showPairHelp(why) {
 	const failed = why === 'failed';
 	const head = failed ? OS_NAME[os] + ' has not paired this unit (or holds an old pairing)' : 'One step first: pair the unit in ' + OS_NAME[os];
 	const lede = (os === 'linux' ? 'Chrome on Linux cannot type a passkey, so the unit is paired once in a terminal and Chrome then uses that pairing.'
-		: os === 'windows' ? 'On Windows, Chrome pairs this unit only after Windows itself has paired it, in Settings. A Windows <b>Add device</b> pop-up does not do it: close it. Once per unit and per computer.'
+		: os === 'windows' ? 'On Windows, Chrome uses this unit only after Windows itself has paired it. Once per unit and per computer.' +
+			(failed ? ' If a Windows <b>Add device</b> pop-up appeared at the bottom of the screen, you can use it instead of Settings: click it, type the passkey, then press <b>I paired it — connect</b> below.' : '')
 		: 'The unit needs its passkey once.') +
 		(failed ? ' The unit may also have been wiped or reflashed since this computer last paired with it.' : '');
 	const first = failed ? (os === 'windows' ? ['If <b>' + name + '</b> is already in <b>Settings → Bluetooth &amp; devices → Devices</b>, remove it first: <b>⋯</b> → <b>Remove device</b>.']
@@ -3887,7 +3911,7 @@ function showPairHelp(why) {
 		'<ol>' + first.concat(pairSteps(os, name, a, pk)).map(s => '<li>' + s + '</li>').join('') + '</ol>' +
 		'<div class="row"><button class="btn" id="b-paired">I paired it — connect</button>' +
 		'<button class="btn sm ghost" id="b-trybrowser">Try in the browser anyway</button></div></div>';
-	$('b-paired').onclick = () => { markPaired(a); $('n-pair').innerHTML = ''; reconnectNow(); };
+	$('b-paired').onclick = () => { markPaired(a); $('n-pair').innerHTML = ''; connectAfterPairing(); };
 	$('b-trybrowser').onclick = () => { $('n-pair').innerHTML = ''; reconnectNow(); };
 }
 function forgetSteps(os, name, a) {
