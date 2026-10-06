@@ -2031,7 +2031,9 @@ function netFromForm() {
 	const allow = ($('n-a0').getAttribute('aria-pressed') === 'true' ? ACCESS.LTEM : 0) |
 		($('n-a1').getAttribute('aria-pressed') === 'true' ? ACCESS.NBIOT : 0) |
 		($('n-a2').getAttribute('aria-pressed') === 'true' ? ACCESS.SAT : 0);
-	const order = [0, 1, 2].map(i => { const v = $('n-ord' + i).value; return v === '' ? ORDER_END : Number(v); });
+	/* Empty rungs go to the tail: the unit stops at the first one (see ladderCompact). */
+	const set = [0, 1, 2].map(i => $('n-ord' + i).value).filter(v => v !== '').map(Number);
+	const order = [0, 1, 2].map(i => i < set.length ? set[i] : ORDER_END);
 	return {
 		allow, order,
 		plmnMode: Number($('n-pmode').value),
@@ -2258,20 +2260,28 @@ $('b-dplwrite').onclick = async e => { e.stopPropagation(); $('b-dplwrite').disa
  * that named it, which is what the tick means. The ladder is a permutation of what is allowed; an
  * access that is not allowed cannot be a rung, so there is nothing to preserve.
  */
+/* 6 Oct 2026: clearing a MIDDLE rung left a gap (LTE-M, -, satellite). The unit reads the ladder
+   up to the first empty rung (config.c), so it saw satellite allowed but not on the ladder and
+   refused the write. The rungs now close up, and ticking an access back puts it on the first
+   free rung, so the ladder always matches the ticks. */
+function ladderCompact() {
+	const v = [0, 1, 2].map(i => $('n-ord' + i).value).filter(x => x !== '');
+	[0, 1, 2].forEach(i => { $('n-ord' + i).value = v[i] ?? ''; });
+}
 ['n-a0', 'n-a1', 'n-a2'].forEach((id, access) => {
 	$(id).onclick = () => {
 		const on = $(id).getAttribute('aria-pressed') !== 'true';
 		$(id).setAttribute('aria-pressed', on);
+		const rungs = [0, 1, 2].map(i => $('n-ord' + i));
 		if (!on) {
 			let cleared = 0;
-			[0, 1, 2].forEach(i => {
-				const sel = $('n-ord' + i);
-				if (sel && String(sel.value) === String(access)) { sel.value = ''; cleared++; }
-			});
-			if (cleared) {
-				say('cleared ' + cleared + ' ladder rung(s) that named the access you just unticked \u2014 ' +
-				    'the unit refuses a ladder that is not a permutation of the allowed accesses');
-			}
+			rungs.forEach(sel => { if (String(sel.value) === String(access)) { sel.value = ''; cleared++; } });
+			ladderCompact();
+			if (cleared) say('took the access you unticked off the ladder; the rungs below it moved up');
+		} else if (!rungs.some(sel => String(sel.value) === String(access))) {
+			ladderCompact();
+			const free = rungs.find(sel => sel.value === '');
+			if (free) { free.value = String(access); say('put the access you ticked on the ladder, last'); }
 		}
 	};
 });
@@ -3576,7 +3586,7 @@ $('b-ruleadd').onclick = e => {
    ready        connected and paired: the only state in which the panels are live
    reconnecting the link dropped unexpectedly; trying again on its own for 30 s
    lost         not connected; the panels show what the unit said last, dimmed */
-const BUILD = 'staging · 5 Oct 2026 · issue 5 · Simple mode + connection fixes';
+const BUILD = 'staging · 6 Oct 2026 · issue 6 · Simple mode + connection fixes';
 let link = 'idle', linkGen = 0, readyAt = 0, staleHits = 0, lastPairWhy = 'first';
 let expectLoss = null;          // { why: 'user' | 'reboot' | 'wipe' | 'wipe-reboot', until: ms }
 let retry = null;               // { until: ms, timer, n }
