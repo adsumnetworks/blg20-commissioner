@@ -2804,7 +2804,9 @@ function renderStatus2(s) {
 function windowWords(left) {
 	if (left === null || left === undefined) return null;
 	if (left === 0xFFFF) return 'open (not commissioned, so it stays open)';
-	if (left === 0) return 'closed — hold the button 3–8 s to reopen it';
+	/* 0 is only ever READ over a live link, so it means "closing": the unit never drops the
+	   installer to close the window, it stops advertising when they leave (6 Oct, Omar W6). */
+	if (left === 0) return 'closing — this link stays up; the unit stops advertising when you disconnect. Hold its button 3–8 s to reopen';
 	return 'open, closes ' + Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0') + ' after you disconnect';
 }
 function renderWindow(s) {
@@ -4500,7 +4502,7 @@ $('b-ruleadd').onclick = e => {
    ready        connected and paired: the only state in which the panels are live
    reconnecting the link dropped unexpectedly; trying again on its own for 30 s
    lost         not connected; the panels show what the unit said last, dimmed */
-const BUILD = 'staging · 6 Oct 2026 · issue 6 · Simple mode + connection fixes';
+const BUILD = 'staging · 6 Oct 2026 · issue 7 · Simple mode + connection fixes';
 let link = 'idle', linkGen = 0, readyAt = 0, staleHits = 0, lastPairWhy = 'first';
 let expectLoss = null;          // { why: 'user' | 'reboot' | 'wipe' | 'wipe-reboot', until: ms }
 let retry = null;               // { until: ms, timer, n }
@@ -5124,7 +5126,7 @@ const PARAMS = [
 	   only appear once the status characteristic proves this build carries the mirror. */
 	{ id: 'forcerung', cap: 'cmd3', name: 'Pin the bearer rung', kind: 'cmdsel', def: 'clear the pin', opts: ['clear the pin', 'LTE-M', 'NB-IoT', 'satellite'], danger: true, note: 'command 6 — forwarded to the cellular half. A pin on satellite empties a monthly allowance overnight: clear it before you leave' },
 	{ id: 'statusnow', cap: 'cmd3', name: 'Run a cycle now', kind: 'action', note: 'command 7 — forwarded: the cellular half stops sleeping and attempts an uplink now, so the installer sees a result instead of waiting 15 minutes' },
-	{ id: 'window', cap: 'cmd3', name: 'Commissioning window', kind: 'cmdsel', def: 'open', opts: ['open', 'close'], note: 'command 8 — the BLE half\'s own: advertise connectable, or stop' },
+	{ id: 'window', cap: 'cmd3', name: 'Commissioning window', kind: 'cmdsel', def: 'open', opts: ['open', 'close'], note: 'command 8 — the BLE half\'s own: advertise connectable, or stop. Close does NOT drop you: it takes effect when you disconnect, and the unit then stays out of the chooser until its button is held 3–8 s' },
 	{ id: 'clearlatch', cap: 'cmd3', name: 'Clear a latched alert', kind: 'cmdnums', args: [['latchdev', 'device', 0, 65535], ['latchrule', 'rule', 0, 255]], note: 'command 9 — the rule engine clears the latch and sends the exit that was held back. Device 0 means every device, rule 0 means every rule' },
 	{ id: 'republish', cap: 'cmd3', name: 'Republish the device table', kind: 'action', note: 'command 10 — every row of the short-id table is sent to the cellular half again, and published as a device attribute on the next terrestrial window' },
 	{ id: 'selftest', cap: 'cmd3', name: 'Run the factory self-test', kind: 'action', note: 'command 14 — an UNCOMMISSIONED unit only (a commissioned one refuses). The cellular half proves the state, then both LEDs cycle red, green, blue, amber, white and the unit chirps once; the label (address, passkey, firmware) and the SIM facts appear in the Self-test panel. The same test a power-on with DFU1 held runs' },
