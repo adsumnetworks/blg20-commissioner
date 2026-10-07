@@ -3634,7 +3634,7 @@ $('b-ruleadd').onclick = e => {
    ready        connected and paired: the only state in which the panels are live
    reconnecting the link dropped unexpectedly; trying again on its own for 30 s
    lost         not connected; the panels show what the unit said last, dimmed */
-const BUILD = 'staging · 7 Oct 2026 · issue 18 · Simple mode + connection fixes';
+const BUILD = 'staging · 7 Oct 2026 · issue 19 · Simple mode + connection fixes';
 let link = 'idle', linkGen = 0, readyAt = 0, staleHits = 0, lastPairWhy = 'first', lastOpenFail = null;
 let expectLoss = null;          // { why: 'user' | 'reboot' | 'wipe' | 'wipe-reboot', until: ms }
 let retry = null;               // { until: ms, timer, n }
@@ -4656,11 +4656,12 @@ function sxPaintNet() {
 	$('sx-tick-hint').innerHTML = sat ? 'Not used: satellite only.' : !mobOk ? '<span class="bad">Tick at least one, or choose “Satellite only”.</span>'
 		: nbOnly ? '<span class="bad">NB-IoT only:</span> many SIMs do not accept NB-IoT, and then the unit never sends. Keep LTE-M ticked unless your SIM provider says NB-IoT works.'
 		: 'Keep both unless your operator supports only one.';
+	if (!sat && mobOk && !$('sx-roam').checked) $('sx-tick-hint').innerHTML += ' <span class="bad">Roaming off:</span> most IoT SIMs work only by roaming. Keep it ticked unless your SIM is from a local operator.';
 	sxReq('sx-r-net', !!sx.net && mobOk);
 	$('sx-b4').disabled = !(sx.net && mobOk);
 }
 document.querySelectorAll('input[name=sx-net]').forEach(r => { r.onchange = () => { sx.net = r.value; sxPaintNet(); }; });
-['sx-ltem', 'sx-nb'].forEach(i => { $(i).onchange = sxPaintNet; });
+['sx-ltem', 'sx-nb', 'sx-roam'].forEach(i => { $(i).onchange = sxPaintNet; });
 function sxNetWords(cls, allow, roam, apn) {
 	const mob = [allow & ACCESS.LTEM && 'LTE-M', allow & ACCESS.NBIOT && 'NB-IoT'].filter(Boolean).join(' + ');
 	const w = cls === 1 ? 'Satellite only' : (allow & ACCESS.SAT) ? 'Mobile (' + mob + ') with satellite backup' : 'Mobile only (' + mob + ')';
@@ -4846,6 +4847,14 @@ function sxHealth(s2) {
 	   a success or a power cycle resets it. Say so, or "a few minutes" is a lie for an hour. */
 	else if (m.state === 6) { row('Mobile network', 'meh', '… waiting before its next try on ' + rung + '. After failed tries the unit waits longer each time, up to an hour. To make it try at once, switch the unit off and on.'); wait = true; }
 	else { row('Mobile network', 'meh', '… ' + (BEARER_STATE[m.state] || 'state ' + m.state) + ' on ' + rung + '. Joining the network can take a few minutes: keep this page open.'); wait = true; }
+	/* Roaming (7 Oct, bench): IoT SIMs roam almost everywhere, and with roaming off the cellular half
+	   attaches, sees a foreign country code and lets go (bearer.c roaming_refused, ladder reason 7). */
+	if (lastNet && !lastNet.roaming && m.state !== 5) {
+		const refused = m.ladder.some(r => r === 7);
+		row('Roaming', refused ? 'bad' : 'meh', (refused ? '✗ The SIM is roaming here and roaming is off, so the unit lets go of the network.' : '… Roaming is off. Most IoT SIMs work only by roaming; with it off they are let go after joining.') +
+			' <button class="btn sm" id="sx-fix-roam">Allow roaming</button>');
+		if (refused) bad = true;
+	}
 	/* What the platform answered to the last send (a CoAP code; 0 = nothing sent since boot). */
 	const c = m.upCode, cls = c >> 5, code = coapCode(c), ago = m.upAge === NEVER ? '' : ', ' + dur(m.upAge) + ' ago';
 	if (c === 0) { row('Platform', 'meh', up ? '… nothing sent yet' + (sx.sentNow ? ': a send was requested, the answer shows here' : '') : '… waits for the mobile network'); wait = true; }
@@ -4867,6 +4876,15 @@ function sxHealth(s2) {
 		: accepted && !wait ? '<b>Working.</b> The platform has accepted data from this unit. You can leave.'
 		: '<b>Still checking.</b> Keep this page open: it updates by itself. A first send can take a few minutes.';
 	if ($('sx-fix-ltem')) $('sx-fix-ltem').onclick = sxAllowLtem;
+	if ($('sx-fix-roam')) $('sx-fix-roam').onclick = sxAllowRoam;
+}
+async function sxAllowRoam() {
+	$('sx-fix-roam').disabled = true;
+	if (!sx.net) { sx.net = 'tn'; const r = document.querySelector('input[name=sx-net][value=tn]'); if (r) r.checked = true; }
+	$('sx-roam').checked = true; sxPaintNet();
+	await $('sx-b4').onclick();
+	if (sx.done.has(4) && lastNet && lastNet.roaming) { say('roaming allowed — asking the cellular half to try now', 'good'); sx.sentNow = true; await sendCommand('statusnow'); }
+	sxStage(7);
 }
 async function sxAllowLtem() {
 	$('sx-fix-ltem').disabled = true;
