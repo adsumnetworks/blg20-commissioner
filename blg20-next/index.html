@@ -3632,7 +3632,7 @@ $('b-ruleadd').onclick = e => {
    ready        connected and paired: the only state in which the panels are live
    reconnecting the link dropped unexpectedly; trying again on its own for 30 s
    lost         not connected; the panels show what the unit said last, dimmed */
-const BUILD = 'staging · 7 Oct 2026 · issue 12 · Simple mode + connection fixes';
+const BUILD = 'staging · 7 Oct 2026 · issue 13 · Simple mode + connection fixes';
 let link = 'idle', linkGen = 0, readyAt = 0, staleHits = 0, lastPairWhy = 'first', lastOpenFail = null;
 let expectLoss = null;          // { why: 'user' | 'reboot' | 'wipe' | 'wipe-reboot', until: ms }
 let retry = null;               // { until: ms, timer, n }
@@ -4498,7 +4498,7 @@ function sxStage(n) {
 function sxDone(n) { sx.done.add(n); let k = n + 1; while (k < 7 && sx.done.has(k)) k++; sxStage(Math.min(k, 7)); }
 document.querySelectorAll('[data-edit]').forEach(b => { b.onclick = e => { e.preventDefault(); sxStage(Number(b.dataset.edit)); }; });
 function sxReset() {
-	sx.at = 1; sx.done.clear(); sx.net = null; sx.quar = []; sx.tokenSet = false;
+	sx.at = 1; sx.done.clear(); sx.net = null; sx.quar = []; sx.tokenSet = false; sx.sensors = 0;
 	for (let i = 1; i <= 7; i++) sxNote(i, '', '');
 	document.querySelectorAll('input[name=sx-net]').forEach(r => { r.checked = false; });
 	['sx-name', 'sx-id', 'sx-key', 'sx-tok', 'sx-ll', 'sx-apn'].forEach(id => { $(id).value = ''; delete $(id).dataset.auto; });
@@ -4732,6 +4732,8 @@ $('sx-b6').onclick = async () => {
 	$('ac-exp').value = have.concat(picked.filter(a => !known.has(a)).map(a => a + ', any')).join('\n');
 	const ok = await writeExpected();
 	sxCheck6();
+	/* The summary read status2's count, which the poll had not refreshed yet: "none yet" right after 4 were accepted (bench, 7 Oct). */
+	if (ok) sx.sensors = picked.length;
 	if (ok) { sxNote(6, 'go', '<b>' + picked.length + ' sensor(s)</b> accepted ✓ New sensors later: come back here, or add them in Advanced.'); sxDone(6); }
 	else sxNote(6, 'stop', '<b>Not saved.</b> ' + (($('n-exp').querySelector('.note') || {}).innerHTML || 'The unit refused the list.'));
 };
@@ -4746,7 +4748,7 @@ function sxSummary() {
 		['Key', written.psk ? 'new, in this device\'s register' : (s && s.hasCred ? 'held (written earlier)' : '')],
 		['Network', n && d && sx.done.has(4) ? sxNetWords(d.cls, n.allow, n.roaming, d.apn) : ''],
 		['Platform', d && sx.done.has(5) ? d.endpoint + ':' + d.port + (sx.tokenSet ? ' · token set' : ' · token kept') : ''],
-		['Sensors', sx.done.has(6) ? (lastSta2 && lastSta2.accExpN ? lastSta2.accExpN + ' on the list' : 'none yet') : ''],
+		['Sensors', sx.done.has(6) ? ((lastSta2 && lastSta2.accExpN) || sx.sensors ? ((lastSta2 && lastSta2.accExpN) || sx.sensors) + ' on the list' : 'none yet') : ''],
 	];
 	$('sx-sum').innerHTML = rows.map(([k, v]) => '<li><b>' + k + '</b>' + (v ? v : '<span class="bad">missing</span>') + '</li>').join('');
 }
