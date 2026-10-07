@@ -362,6 +362,7 @@
 <div class="sx off" id="sx5" data-n="5">
 	<h2><span class="n">5</span>Platform<button class="sx-edit" data-edit="5">Change</button></h2>
 	<p>Where the data goes. The <b>device token</b> comes from your platform (ThingsBoard: the device's access token).</p>
+	<p class="hint" style="margin:0 0 6px">ThingsBoard, once per account: the unit sends compact binary data (protobuf), which ThingsBoard reads only with the BLG20 device profile. <a href="thingsboard/blg20-coap-protobuf.device-profile.json" download>Download the profile</a>, import it in <b>Profiles → Device profiles → + → Import</b>, then set it on the device. Without it, ThingsBoard refuses the data.</p>
 	<label class="sx-f" for="sx-srv">Server address <span class="sx-req ok">from the unit</span></label>
 	<div class="row"><input type="text" id="sx-srv" class="mono" maxlength="47" style="flex:3 1 200px" autocomplete="off" spellcheck="false"><input type="number" id="sx-port" min="1" max="65535" style="flex:1 1 90px" aria-label="Port"></div>
 	<label class="sx-f" for="sx-tok">Device token <span class="sx-req" id="sx-r-tok">required</span></label>
@@ -1467,7 +1468,7 @@ const DECOM_SRC = ['never', 'the installer, over Bluetooth', 'the platform, thro
 const BEARER_STATE = ['off', 'configuring', 'sim', 'attaching', 'registered', 'up', 'backoff', 'PARKED'];
 const RUNG = ['LTE-M', 'NB-IoT', 'satellite'];
 const REASON = ['—', 'ok', 'radio inhibited (bench build)', 'parked by the governor', 'backoff',
-	'rung not supported', 'no commissioned position', 'no SIM', 'the modem refused CFUN=1',
+	'rung not supported', 'no commissioned position', 'no SIM', 'the modem refused CFUN=1: this SIM or network refuses this technology, so the radio stays off',
 	'never registered', 'registered, no PDN'];
 const IMG = ['running, confirmed', 'ON TEST — one reboot from a rollback', 'unknown'];
 /* Zephyr hwinfo.h. Bits 8 and up (CPU_LOCKUP, PARITY, PLL, CLOCK, HARDWARE, USER, TEMPERATURE)
@@ -1885,6 +1886,7 @@ function renderStatus2(s) {
 	setv('xtrans', n0(m.transitions) + ' since boot');
 
 	lastSta2 = s;
+	if (sx.done.has(7)) sxHealth(s);   // Simple's check and finish stays live
 }
 /* The commissioning window, in words, from status2 v8 (5 Oct 2026). "Nothing in the chooser" was
    the most common confusion on the bench: a commissioned unit stops advertising five minutes after
@@ -3632,7 +3634,7 @@ $('b-ruleadd').onclick = e => {
    ready        connected and paired: the only state in which the panels are live
    reconnecting the link dropped unexpectedly; trying again on its own for 30 s
    lost         not connected; the panels show what the unit said last, dimmed */
-const BUILD = 'staging · 7 Oct 2026 · issue 15 · Simple mode + connection fixes';
+const BUILD = 'staging · 7 Oct 2026 · issue 16 · Simple mode + connection fixes';
 let link = 'idle', linkGen = 0, readyAt = 0, staleHits = 0, lastPairWhy = 'first', lastOpenFail = null;
 let expectLoss = null;          // { why: 'user' | 'reboot' | 'wipe' | 'wipe-reboot', until: ms }
 let retry = null;               // { until: ms, timer, n }
@@ -4644,7 +4646,11 @@ function sxPaintNet() {
 	['sx-ltem', 'sx-nb'].forEach(i => { $(i).disabled = sat; }); $('sx-l-ltem').classList.toggle('dis', sat); $('sx-l-nb').classList.toggle('dis', sat);
 	$('sx-sat-warn').hidden = !(sx.net === 'mix' || sat);
 	const mobOk = sat || $('sx-ltem').checked || $('sx-nb').checked;
-	$('sx-tick-hint').innerHTML = sat ? 'Not used: satellite only.' : mobOk ? 'Keep both unless your operator supports only one.' : '<span class="bad">Tick at least one, or choose “Satellite only”.</span>';
+	/* 7 Oct (bench): NB-IoT alone on a SIM that refuses it = a unit that never sends. Say so at the tick. */
+	const nbOnly = !sat && !$('sx-ltem').checked && $('sx-nb').checked;
+	$('sx-tick-hint').innerHTML = sat ? 'Not used: satellite only.' : !mobOk ? '<span class="bad">Tick at least one, or choose “Satellite only”.</span>'
+		: nbOnly ? '<span class="bad">NB-IoT only:</span> many SIMs do not accept NB-IoT, and then the unit never sends. Keep LTE-M ticked unless your SIM provider says NB-IoT works.'
+		: 'Keep both unless your operator supports only one.';
 	sxReq('sx-r-net', !!sx.net && mobOk);
 	$('sx-b4').disabled = !(sx.net && mobOk);
 }
@@ -4782,26 +4788,81 @@ $('sx-b7').onclick = async () => {
 		return;
 	}
 	$('sx-b7').textContent = 'Check again';
-	const h = [];
-	const row = (k, cls, v) => h.push('<li><b>' + k + '</b><span class="' + cls + '">' + v + '</span></li>');
-	if (s2) {
-		const unsaved = (s2.cfgFlags & 0x04) || s2.settingsErr;
-		row('Bluetooth', unsaved ? 'bad' : 'ok', unsaved ? '✗ a setting could not be saved (error ' + (s2.settingsErr || '?') + ')' : '✓ everything saved on the unit');
-		row('Cellular half', s2.linkAlive ? 'ok' : 'bad', s2.linkAlive ? '✓ answering, has the position' : '✗ not answering — it has not received the position yet');
-		const bearer = s2.age === NEVER ? 'not reported yet' : (BEARER_STATE[s2.m.state] || 'state ' + s2.m.state);
-		row('Network', s2.m.state === 5 ? 'ok' : 'meh', s2.m.state === 5 ? '✓ up (' + (RUNG[s2.m.rung] || '') + ')' : '… ' + bearer + '. Attaching can take minutes; you can leave');
-		row('Sensors', s2.accExpN ? 'ok' : 'bad', s2.accExpN ? '✓ ' + s2.accExpSeen + ' of ' + s2.accExpN + ' heard' : '✗ no sensor list: nothing will be stored');
-		const w = windowWords(s2.windowLeft); if (w) row('Window', 'meh', w);
-	} else row('Unit', 'ok', '✓ commissioned');
 	$('b-record').onclick();
-	row('Register', 'ok', '✓ this unit' + (written.psk ? ' and its key' : '') + ' saved on this device');
-	$('sx-o7').innerHTML = '<ul class="sx-health">' + h.join('') + '</ul>' +
+	$('sx-o7').innerHTML = '<p id="sx-verdict"></p><ul class="sx-health" id="sx-health"></ul>' +
 		(written.psk ? '<p class="note warn" style="margin-top:8px">Export the register before you leave: the key exists only there and in the unit.</p>' : '') +
 		'<div class="row" style="margin-top:10px"><button class="btn sx-big" id="sx-export">Export the register</button><button class="btn quiet sx-big" id="sx-next">Set up the next unit</button></div>';
 	$('sx-export').onclick = () => $('reg-csv').click();
 	$('sx-next').onclick = () => $('b-connect').onclick();
-	sx.done.add(7); sxPaint();
+	sx.done.add(7); sx.sentNow = false; sxPaint();
+	/* Do not make the installer wait up to 15 minutes for the first send: ask for one now. */
+	if (s2 && s2.linkAlive && caps.sta2) { sx.sentNow = true; await sendCommand('statusnow'); }
+	sxHealth(lastSta2 || s2);
 };
+/* 7 Oct 2026 (Omar, bench): Simple's check said "… backoff. Attaching can take minutes; you can leave"
+   while the cellular half had been refused NB-IoT for hours (the bench SIM does not take it) and
+   nothing ever reached ThingsBoard. The check now stays live (every status poll redraws it), names
+   the cause in words with the fix beside it, follows the data all the way to the platform's answer,
+   and says "you can leave" only once the platform has accepted data. */
+const SX_REASON_FIX = {
+	2: ['warn', 'The radio is switched off in this build (a bench image). It will never send.'],
+	3: ['bad', 'The unit has used its data allowance and parked itself until the next period.'],
+	6: ['bad', 'The cellular half has no position yet. Go back to step 2, then press Check again.'],
+	7: ['bad', 'No SIM card found. Fit the SIM, then switch the unit off and on.'],
+	9: ['bad', 'No mobile network answered with the technologies allowed. Check the coverage here, or allow the other technology (step 4).'],
+	10: ['bad', 'The network accepted the SIM but refused the data connection. The APN is probably wrong: set it in step 4.'],
+};
+function sxHealth(s2) {
+	if (!$('sx-health')) return;
+	const h = [];
+	const row = (k, cls, v) => h.push('<li><b>' + k + '</b><span class="' + cls + '">' + v + '</span></li>');
+	let bad = false, wait = false, up = false, accepted = false;
+	if (!s2) { row('Unit', 'ok', '✓ commissioned'); $('sx-health').innerHTML = h.join(''); return; }
+	const unsaved = (s2.cfgFlags & 0x04) || s2.settingsErr;
+	row('Bluetooth', unsaved ? 'bad' : 'ok', unsaved ? '✗ a setting could not be saved (error ' + (s2.settingsErr || '?') + ')' : '✓ everything saved on the unit');
+	if (unsaved) bad = true;
+	row('Cellular half', s2.linkAlive ? 'ok' : 'bad', s2.linkAlive ? '✓ answering, has the position' : '✗ not answering — it has not received the position yet');
+	if (!s2.linkAlive) bad = true;
+	const m = s2.m, rung = RUNG[m.rung] || 'the network';
+	const allowLtem = lastNet ? !!(lastNet.allow & ACCESS.LTEM) : true;
+	if (s2.age === NEVER) { row('Mobile network', 'meh', '… not reported yet'); wait = true; }
+	else if (m.state === 5) { row('Mobile network', 'ok', '✓ connected on ' + rung + (m.rsrp ? ' (signal ' + m.rsrp + ' dBm)' : '')); up = true; }
+	else if (m.reason === 8) {
+		bad = true;
+		row('Mobile network', 'bad', '✗ The SIM or the network refuses <b>' + rung + '</b> here, so the radio cannot switch on. Nothing can be sent.' +
+			(!allowLtem ? ' Most SIMs take LTE-M: <button class="btn sm" id="sx-fix-ltem">Allow LTE-M too</button>' : ' Allow another technology in step 4.'));
+	} else if (SX_REASON_FIX[m.reason]) { const [c, w] = SX_REASON_FIX[m.reason]; row('Mobile network', c, (c === 'bad' ? '✗ ' : '… ') + w); if (c === 'bad') bad = true; else wait = true; }
+	else { row('Mobile network', 'meh', '… ' + (BEARER_STATE[m.state] || 'state ' + m.state) + ' on ' + rung + '. Joining the network can take a few minutes: keep this page open.'); wait = true; }
+	/* What the platform answered to the last send (a CoAP code; 0 = nothing sent since boot). */
+	const c = m.upCode, cls = c >> 5, code = coapCode(c), ago = m.upAge === NEVER ? '' : ', ' + dur(m.upAge) + ' ago';
+	if (c === 0) { row('Platform', 'meh', up ? '… nothing sent yet' + (sx.sentNow ? ': a send was requested, the answer shows here' : '') : '… waits for the mobile network'); wait = true; }
+	else if (c === 0xFF) { row('Platform', 'bad', '✗ Sent, but the server never answered' + ago + '. Check the server address and port (step 5).'); bad = true; }
+	else if (cls === 2) { row('Platform', 'ok', '✓ the platform accepted the data (code ' + code + ago + ')'); accepted = true; }
+	else if (c === ((4 << 5) | 1) || c === ((4 << 5) | 3)) { row('Platform', 'bad', '✗ The platform refused the device token (code ' + code + ago + '). Check the token in step 5.'); bad = true; }
+	else if (cls === 4) {
+		row('Platform', 'bad', '✗ The platform refused the data (code ' + code + ago + '). On ThingsBoard the device must use the BLG20 device profile (CoAP + protobuf): ' +
+			'<a href="thingsboard/blg20-coap-protobuf.device-profile.json" download>download it</a>, import it in <b>Profiles → Device profiles</b>, and set it on the device.');
+		bad = true;
+	} else { row('Platform', 'meh', '… the platform answered ' + code + ago + ' (a server-side error): it retries on the next cycle.'); wait = true; }
+	row('Sensors', s2.accExpN ? 'ok' : 'bad', s2.accExpN ? '✓ ' + s2.accExpSeen + ' of ' + s2.accExpN + ' heard' : '✗ no sensor list: nothing will be stored');
+	if (!s2.accExpN) bad = true;
+	const w = windowWords(s2.windowLeft); if (w) row('Window', 'meh', w);
+	row('Register', 'ok', '✓ this unit' + (written.psk ? ' and its key' : '') + ' saved on this device');
+	$('sx-health').innerHTML = h.join('');
+	$('sx-verdict').className = 'note ' + (bad ? 'stop' : accepted && !wait ? 'go' : 'warn');
+	$('sx-verdict').innerHTML = bad ? '<b>Not working yet.</b> Fix the red line below; this check updates by itself every few seconds.'
+		: accepted && !wait ? '<b>Working.</b> The platform has accepted data from this unit. You can leave.'
+		: '<b>Still checking.</b> Keep this page open: it updates by itself. A first send can take a few minutes.';
+	if ($('sx-fix-ltem')) $('sx-fix-ltem').onclick = sxAllowLtem;
+}
+async function sxAllowLtem() {
+	$('sx-fix-ltem').disabled = true;
+	if (!sx.net) { sx.net = 'tn'; const r = document.querySelector('input[name=sx-net][value=tn]'); if (r) r.checked = true; }
+	$('sx-ltem').checked = true; sxPaintNet();
+	await $('sx-b4').onclick();
+	if (sx.done.has(4) && lastNet && (lastNet.allow & ACCESS.LTEM)) { say('LTE-M allowed — asking the cellular half to try now', 'good'); sx.sentNow = true; await sendCommand('statusnow'); }
+	sxStage(7);
+}
 $('sx-identify').onclick = () => { if (link === 'ready') sendCommand('identify'); };
 $('sx-retire').onclick = () => { setMode('advanced'); $('p-decom').hidden = false; $('p-decom').classList.add('open'); if ($('p-decom').scrollIntoView) $('p-decom').scrollIntoView(); };
 
