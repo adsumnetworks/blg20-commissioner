@@ -4548,7 +4548,7 @@ $('b-ruleadd').onclick = e => {
    ready        connected and paired: the only state in which the panels are live
    reconnecting the link dropped unexpectedly; trying again on its own for 30 s
    lost         not connected; the panels show what the unit said last, dimmed */
-const BUILD = 'staging · 7 Oct 2026 · issue 17 · Simple mode + connection fixes';
+const BUILD = 'staging · 7 Oct 2026 · issue 18 · Simple mode + connection fixes';
 let link = 'idle', linkGen = 0, readyAt = 0, staleHits = 0, lastPairWhy = 'first', lastOpenFail = null;
 let expectLoss = null;          // { why: 'user' | 'reboot' | 'wipe' | 'wipe-reboot', until: ms }
 let retry = null;               // { until: ms, timer, n }
@@ -5459,6 +5459,11 @@ async function sxOnReady() {
 				sx.net = d.cls === 1 ? 'ntn' : (d.cls === 2 && (n.allow & ACCESS.SAT)) ? 'mix' : 'tn';
 				const r = document.querySelector('input[name=sx-net][value=' + sx.net + ']'); if (r) r.checked = true;
 				$('sx-ltem').checked = !!(n.allow & ACCESS.LTEM) || sx.net === 'ntn'; $('sx-nb').checked = !!(n.allow & ACCESS.NBIOT) || sx.net === 'ntn';
+				/* 7 Oct (bench): reconnecting to a commissioned unit left steps 4-5 open and the summary
+				   said "Platform missing" about a unit that holds both. Say what it holds instead. */
+				sx.done.add(4); sxNote(4, 'go', 'The unit holds: ' + sxNetWords(d.cls, n.allow, n.roaming, d.apn) + '. Change it only if that is wrong.');
+				sx.done.add(5); $('sx-tokkeep').checked = true;
+				sxNote(5, 'go', 'The unit sends to <code>' + d.endpoint + ':' + d.port + '</code> with the token it holds. Change it only to give it a new token.');
 			}
 			$('sx-roam').checked = !!n.roaming; $('sx-apn').value = d.apn || '';
 			$('sx-srv').value = d.endpoint; $('sx-port').value = String(d.port);
