@@ -4548,7 +4548,7 @@ $('b-ruleadd').onclick = e => {
    ready        connected and paired: the only state in which the panels are live
    reconnecting the link dropped unexpectedly; trying again on its own for 30 s
    lost         not connected; the panels show what the unit said last, dimmed */
-const BUILD = 'staging · 7 Oct 2026 · issue 16 · Simple mode + connection fixes';
+const BUILD = 'staging · 7 Oct 2026 · issue 17 · Simple mode + connection fixes';
 let link = 'idle', linkGen = 0, readyAt = 0, staleHits = 0, lastPairWhy = 'first', lastOpenFail = null;
 let expectLoss = null;          // { why: 'user' | 'reboot' | 'wipe' | 'wipe-reboot', until: ms }
 let retry = null;               // { until: ms, timer, n }
@@ -5604,6 +5604,7 @@ $('sx-b4').onclick = async () => {
 	const ok1 = await writeBlock(first), ok2 = ok1 && await writeBlock(second);
 	sxPaintNet();
 	if (ok1 && ok2) {
+		sx.netAt = Date.now();
 		sxNote(4, 'go', 'Saved on the unit ✓ ' + sxNetWords(cls, allow, $('sx-roam').checked, $('sx-apn').value.trim()) +
 			(switched ? '. Data is now sent as CoAP + protobuf, the only way that works over satellite.' : '.'));
 		sxDone(4);
@@ -5741,11 +5742,18 @@ function sxHealth(s2) {
 	const allowLtem = lastNet ? !!(lastNet.allow & ACCESS.LTEM) : true;
 	if (s2.age === NEVER) { row('Mobile network', 'meh', '… not reported yet'); wait = true; }
 	else if (m.state === 5) { row('Mobile network', 'ok', '✓ connected on ' + rung + (m.rsrp ? ' (signal ' + m.rsrp + ' dBm)' : '')); up = true; }
+	/* The mirror's reason belongs to the LAST try: for a while after a new network setting it still
+	   names the old refusal against the new rung (bench, 7 Oct: "refuses LTE-M" 30 s after LTE-M was allowed). */
+	else if (m.reason === 8 && sx.netAt && Date.now() - sx.netAt < 90000) { row('Mobile network', 'meh', '… new network setting saved; the unit applies it on its next try.'); wait = true; }
 	else if (m.reason === 8) {
 		bad = true;
-		row('Mobile network', 'bad', '✗ The SIM or the network refuses <b>' + rung + '</b> here, so the radio cannot switch on. Nothing can be sent.' +
+		row('Mobile network', 'bad', '✗ The radio could not switch on with <b>' + rung + '</b> (the modem refused). Most often the SIM does not take ' + rung + '. Nothing can be sent.' +
 			(!allowLtem ? ' Most SIMs take LTE-M: <button class="btn sm" id="sx-fix-ltem">Allow LTE-M too</button>' : ' Allow another technology in step 4.'));
 	} else if (SX_REASON_FIX[m.reason]) { const [c, w] = SX_REASON_FIX[m.reason]; row('Mobile network', c, (c === 'bad' ? '✗ ' : '… ') + w); if (c === 'bad') bad = true; else wait = true; }
+	/* 7 Oct (bench): after hours of failed tries the cellular half waits up to an HOUR between tries
+	   (bearer.c, BACKOFF_MAX_S), and neither a new network setting nor "send now" shortens it. Only
+	   a success or a power cycle resets it. Say so, or "a few minutes" is a lie for an hour. */
+	else if (m.state === 6) { row('Mobile network', 'meh', '… waiting before its next try on ' + rung + '. After failed tries the unit waits longer each time, up to an hour. To make it try at once, switch the unit off and on.'); wait = true; }
 	else { row('Mobile network', 'meh', '… ' + (BEARER_STATE[m.state] || 'state ' + m.state) + ' on ' + rung + '. Joining the network can take a few minutes: keep this page open.'); wait = true; }
 	/* What the platform answered to the last send (a CoAP code; 0 = nothing sent since boot). */
 	const c = m.upCode, cls = c >> 5, code = coapCode(c), ago = m.upAge === NEVER ? '' : ', ' + dur(m.upAge) + ' ago';
