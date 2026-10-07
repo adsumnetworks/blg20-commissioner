@@ -3632,7 +3632,7 @@ $('b-ruleadd').onclick = e => {
    ready        connected and paired: the only state in which the panels are live
    reconnecting the link dropped unexpectedly; trying again on its own for 30 s
    lost         not connected; the panels show what the unit said last, dimmed */
-const BUILD = 'staging · 7 Oct 2026 · issue 11 · Simple mode + connection fixes';
+const BUILD = 'staging · 7 Oct 2026 · issue 12 · Simple mode + connection fixes';
 let link = 'idle', linkGen = 0, readyAt = 0, staleHits = 0, lastPairWhy = 'first', lastOpenFail = null;
 let expectLoss = null;          // { why: 'user' | 'reboot' | 'wipe' | 'wipe-reboot', until: ms }
 let retry = null;               // { until: ms, timer, n }
@@ -3870,7 +3870,7 @@ async function connectAfterPairing() {
 		if (await openLink('connect')) return;
 		if (link === 'ready' || i === 2) return;
 		$('n-pair').innerHTML = ''; markPaired(a);
-		say('the link dropped straight after pairing (Windows settling the new pairing) — trying again');
+		say('the link dropped straight after pairing (the system is still settling the new pairing) — trying again');
 		await new Promise(r => setTimeout(r, 1500));
 	}
 }
@@ -3920,8 +3920,13 @@ function showPairHelp(why) {
 		'<p style="margin:0 0 6px">Passkey for ' + name + ':</p><div class="pk-big" aria-label="passkey">' + pk + '</div>' +
 		'<ol>' + first.concat(pairSteps(os, name, a, pk)).map(s => '<li>' + s + '</li>').join('') + '</ol>' +
 		'<div class="row"><button class="btn" id="b-paired">I paired it — connect</button>' +
+		(os === 'linux' ? '<span class="hint" style="align-self:center">Chrome shows its list once more: pick the unit again.</span>' : '') +
 		'<button class="btn sm ghost" id="b-trybrowser">Try in the browser anyway</button></div></div>';
-	$('b-paired').onclick = () => { markPaired(a); $('n-pair').innerHTML = ''; connectAfterPairing(); };
+	/* 7 Oct 2026 (bench): on Linux, removing and re-pairing in bluetoothctl gives the unit a NEW BlueZ
+	   object, and the device Chrome already holds never connects again ("connect: no answer in 15 s"
+	   while bluetoothctl itself connects at once). So on Linux "I paired it" opens the chooser for a
+	   fresh handle. Windows keeps its device across a re-pair, so it reconnects in place. */
+	$('b-paired').onclick = () => { markPaired(a); $('n-pair').innerHTML = ''; if (os === 'linux') chooseAndConnect(); else connectAfterPairing(); };
 	$('b-trybrowser').onclick = () => { $('n-pair').innerHTML = ''; reconnectNow(); };
 }
 function forgetSteps(os, name, a) {
