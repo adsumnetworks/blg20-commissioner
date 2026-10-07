@@ -3632,7 +3632,7 @@ $('b-ruleadd').onclick = e => {
    ready        connected and paired: the only state in which the panels are live
    reconnecting the link dropped unexpectedly; trying again on its own for 30 s
    lost         not connected; the panels show what the unit said last, dimmed */
-const BUILD = 'staging · 7 Oct 2026 · issue 14 · Simple mode + connection fixes';
+const BUILD = 'staging · 7 Oct 2026 · issue 15 · Simple mode + connection fixes';
 let link = 'idle', linkGen = 0, readyAt = 0, staleHits = 0, lastPairWhy = 'first', lastOpenFail = null;
 let expectLoss = null;          // { why: 'user' | 'reboot' | 'wipe' | 'wipe-reboot', until: ms }
 let retry = null;               // { until: ms, timer, n }
@@ -3744,9 +3744,10 @@ async function openLink(kind) {
 		// Reading status is also what triggers pairing: every attribute needs an authenticated link,
 		// and it is better to meet the passkey prompt now than mid-commission. A person is typing
 		// six digits while this waits, hence the long deadline.
-		/* 90 s where a person types the passkey into the browser's prompt; 12 s on Windows and
-		   Linux, where nobody does - an unpaired link there only ever waits for nothing. */
-		const sysPair = platform() === 'windows' || platform() === 'linux';
+		/* 90 s where a person types the passkey: the browser's prompt, or Blueman's window on Linux.
+		   12 s on Windows, where nobody does - an unpaired link there only ever waits for nothing.
+		   (Linux with no passkey helper fails in half a second, measured 7 Oct, so 90 s costs nothing.) */
+		const sysPair = platform() === 'windows';
 		const s = await readStatus(auto ? 'silent' : 'nofail', sysPair ? 12000 : 90000);   // a failure is said once, below
 		if (gen !== linkGen) return false;
 		if (!s) throw lastReadError || new Error('the unit could not be read');
@@ -3896,55 +3897,61 @@ function pairSteps(os, name, a, pk) {
 		'Pick <b>' + name + '</b>. Not in the list? Set <b>Bluetooth devices discovery</b> to <b>Advanced</b> (same Settings page) and look again.',
 		'Windows asks for a PIN: type <b>' + pk + '</b> and press <b>Connect</b>.',
 		'When Windows says it is connected, come back here and press <b>I paired it — connect</b>.'];
-	/* 7 Oct 2026 (Omar): the terminal was the main path and it is real friction; a teammate pairs from
-	   Settings with the mouse, exactly as on Windows. Settings first; bluetoothctl only as the fallback. */
+	/* 7 Oct 2026 (Omar): no terminal. GNOME's own Settings → Bluetooth CANNOT pair this unit: its
+	   agent registers as DisplayYesNo and answers RequestPasskey with "not implemented"
+	   (gnome-bluetooth 46, bluetooth-settings-widget.c), so the unit shows "Not Set Up" and a click
+	   does nothing. Blueman's agent does ask for a passkey: with it running, Chrome's own connect pops
+	   "Pairing request … Enter passkey" (bench, Ubuntu 24.04: asked within 1 s, ready 10 s later). */
 	if (os === 'linux') return [
-		'Open <b>Settings → Bluetooth</b> and click <b>' + name + '</b>.',
-		'When it asks for the passkey, type <b>' + pk + '</b> and confirm.',
-		'When it says <b>Connected</b>, click the unit again and switch its <b>Connection</b> off: it stays paired, and Chrome opens its own link.',
-		'Come back here and press <b>I paired it — connect</b>.'];
+		'Once per computer: install <b>Bluetooth Manager</b>. Open <b>App Center</b>, search <b>Blueman</b>, press <b>Install</b>, then open <b>Bluetooth Manager</b> once from the app list. Already have it? Skip this.',
+		'Close <b>Settings → Bluetooth</b> if it is open: while open, it answers pairing itself and refuses the passkey.',
+		'Press <b>Connect — pair now</b> below. A small window <b>Pairing request</b> appears: type <b>' + pk + '</b> and press <b>OK</b>.'];
 	return ['Connect, and type <b>' + pk + '</b> when the system asks.'];
 }
-/* The terminal route, for a desktop whose Settings shows no passkey box (or no Bluetooth panel at all). */
+/* The terminal route, for a computer where Bluetooth Manager cannot be installed. */
 function linuxTerminalSteps(a, pk) {
 	return [
-		'Close the Bluetooth settings panel if it is open: two pairing helpers at once confuse BlueZ.',
+		'Close <b>Settings → Bluetooth</b> and <b>Bluetooth Manager</b> if they are open: two pairing helpers at once confuse Linux.',
 		'Open a terminal, run <code>bluetoothctl</code>, then type <code>agent KeyboardOnly</code> and <code>default-agent</code>.',
 		'Type <code>scan on</code>, wait until <code>' + addrColon(a) + '</code> appears, then <code>scan off</code>.',
 		'Type <code>pair ' + addrColon(a) + '</code>. When it asks for the passkey, type <b>' + pk + '</b>.',
-		'Type <code>disconnect ' + addrColon(a) + '</code> and <code>quit</code> (Chrome opens its own link), then press <b>I paired it — connect</b>.'];
+		'Type <code>disconnect ' + addrColon(a) + '</code> and <code>quit</code> (Chrome opens its own link), then press <b>Connect — pair now</b>.'];
 }
 function showPairHelp(why) {
 	lastPairWhy = why || 'first';
 	const os = platform(), a = unitAddr(), pk = passkeyFromName(dev && dev.name) || '(on the label)', name = (dev && dev.name) || 'the unit';
 	const failed = why === 'failed';
 	const head = failed ? OS_NAME[os] + ' has not paired this unit (or holds an old pairing)' : 'One step first: pair the unit in ' + OS_NAME[os];
-	const lede = (os === 'linux' ? 'Chrome on Linux cannot type a passkey, so Linux pairs the unit once, in its Bluetooth settings, and Chrome then uses that pairing.'
+	const lede = (os === 'linux' ? 'Ubuntu\'s own <b>Settings → Bluetooth</b> cannot type a passkey: it lists the unit as <b>Not Set Up</b> and nothing happens when you click it. <b>Bluetooth Manager</b> (Blueman) can: it asks for the passkey in a small window, as Windows and macOS do.'
 		: os === 'windows' ? 'On Windows, Chrome uses this unit only after Windows itself has paired it. Once per unit and per computer.' +
 			(failed ? ' If a Windows <b>Add device</b> pop-up appeared at the bottom of the screen, you can use it instead of Settings: click it, type the passkey, then press <b>I paired it — connect</b> below.' : '')
 		: 'The unit needs its passkey once.') +
 		(failed ? ' The unit may also have been wiped or reflashed since this computer last paired with it.' : '');
 	const first = failed ? (os === 'windows' ? ['If <b>' + name + '</b> is already in <b>Settings → Bluetooth &amp; devices → Devices</b>, remove it first: <b>⋯</b> → <b>Remove device</b>.']
-		: os === 'linux' ? ['If <b>' + name + '</b> is already listed in <b>Settings → Bluetooth</b>, click it and choose <b>Remove Device</b> (or <b>Forget</b>) first.'] : []) : [];
+		: os === 'linux' ? ['If <b>' + name + '</b> shows a key or a tick in <b>Bluetooth Manager</b> (it is paired), right-click it → <b>Remove…</b> first.'] : []) : [];
 	$('n-pair').innerHTML = '<div class="card warn"><h3>' + head + '</h3><p style="margin:0 0 6px">' + lede + '</p>' +
 		'<p style="margin:0 0 6px">Passkey for ' + name + ':</p><div class="pk-big" aria-label="passkey">' + pk + '</div>' +
 		'<ol>' + first.concat(pairSteps(os, name, a, pk)).map(s => '<li>' + s + '</li>').join('') + '</ol>' +
-		(os === 'linux' ? '<details style="margin:0 0 8px"><summary>No passkey box in Settings, or it fails? Pair in a terminal instead</summary><ol>' +
+		(os === 'linux' ? '<details style="margin:0 0 8px"><summary>Cannot install Bluetooth Manager? Pair in a terminal instead</summary><ol>' +
 			(failed ? ['Remove the old pairing: <code>bluetoothctl remove ' + addrColon(a) + '</code>.'] : []).concat(linuxTerminalSteps(a, pk)).map(s => '<li>' + s + '</li>').join('') + '</ol></details>' : '') +
-		'<div class="row"><button class="btn" id="b-paired">I paired it — connect</button>' +
-		(os === 'linux' ? '<span class="hint" style="align-self:center">Chrome shows its list once more: pick the unit again.</span>' : '') +
-		'<button class="btn sm ghost" id="b-trybrowser">Try in the browser anyway</button></div></div>';
-	/* 7 Oct 2026 (bench): on Linux, removing and re-pairing in bluetoothctl gives the unit a NEW BlueZ
-	   object, and the device Chrome already holds never connects again ("connect: no answer in 15 s"
-	   while bluetoothctl itself connects at once). So on Linux "I paired it" opens the chooser for a
-	   fresh handle. Windows keeps its device across a re-pair, so it reconnects in place. */
-	$('b-paired').onclick = () => { markPaired(a); $('n-pair').innerHTML = ''; if (os === 'linux') chooseAndConnect(); else connectAfterPairing(); };
-	$('b-trybrowser').onclick = () => { $('n-pair').innerHTML = ''; reconnectNow(); };
+		'<div class="row"><button class="btn" id="b-paired">' + (os === 'linux' ? 'Connect — pair now' : 'I paired it — connect') + '</button>' +
+		(os === 'linux' && failed ? '<span class="hint" style="align-self:center">Chrome shows its list once more: pick the unit again.</span>' : '') +
+		(os === 'linux' ? '' : '<button class="btn sm ghost" id="b-trybrowser">Try in the browser anyway</button>') + '</div></div>';
+	/* 7 Oct 2026 (bench): on Linux, removing a pairing (Bluetooth Manager or bluetoothctl) gives the
+	   unit a NEW BlueZ object, and the device Chrome already holds never connects again ("connect: no
+	   answer in 15 s"). So after a failure, where the card asks for a removal, Linux opens the chooser
+	   for a fresh handle. On first contact nothing was removed: connect in place, and Blueman's
+	   passkey window appears during the first read. Windows keeps its device across a re-pair. */
+	$('b-paired').onclick = () => {
+		markPaired(a); $('n-pair').innerHTML = '';
+		if (os === 'linux' && failed) chooseAndConnect(); else if (os === 'linux') reconnectNow(); else connectAfterPairing();
+	};
+	if ($('b-trybrowser')) $('b-trybrowser').onclick = () => { $('n-pair').innerHTML = ''; reconnectNow(); };
 }
 function forgetSteps(os, name, a) {
 	return {
 		windows: 'Windows: <b>Settings → Bluetooth &amp; devices → Devices</b>, find <b>' + name + '</b>, press <b>⋯</b> → <b>Remove device</b>.',
-		linux: 'Linux: in a terminal, <code>bluetoothctl remove ' + addrColon(a) + '</code>.',
+		linux: 'Linux: open <b>Bluetooth Manager</b>, right-click <b>' + name + '</b> → <b>Remove…</b> (or in a terminal, <code>bluetoothctl remove ' + addrColon(a) + '</code>).',
 		android: 'Android: <b>Settings → Connected devices</b>, tap the gear next to <b>' + name + '</b> → <b>Forget</b>. (Android 15 and older usually re-pair on their own; Android 16 needs this.)',
 		mac: 'macOS: <b>System Settings → Bluetooth</b>, the ⓘ next to <b>' + name + '</b> → <b>Forget This Device</b>.',
 		chromeos: 'ChromeOS: <b>Settings → Bluetooth</b>, <b>' + name + '</b> → <b>Forget</b>.',
@@ -3999,7 +4006,7 @@ async function chooseAndConnect() {
 				'permission: System Settings → Privacy &amp; Security → Bluetooth ' +
 				'→ Google Chrome. The chooser stays empty and says nothing when that is ' +
 				'off. Quit Chrome fully and reopen it after granting.' +
-				(platform() === 'linux' ? '<br><br>On Linux, a unit another tool (bluetoothctl, GNOME settings) is still connected to does not advertise: <code>bluetoothctl disconnect</code> it first.' : '') + '</p>';
+				(platform() === 'linux' ? '<br><br>On Linux, a unit another tool (Bluetooth Manager, Settings, bluetoothctl) is still connected to does not advertise: disconnect it there first.' : '') + '</p>';
 			return;
 		}
 		if (e.name === 'SecurityError') { $('n-connect').innerHTML = '<p class="note stop"><b>Bluetooth is blocked here.</b> Open the page in its own tab.</p>'; return; }
