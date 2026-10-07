@@ -3632,8 +3632,8 @@ $('b-ruleadd').onclick = e => {
    ready        connected and paired: the only state in which the panels are live
    reconnecting the link dropped unexpectedly; trying again on its own for 30 s
    lost         not connected; the panels show what the unit said last, dimmed */
-const BUILD = 'staging · 6 Oct 2026 · issue 10 · Simple mode + connection fixes';
-let link = 'idle', linkGen = 0, readyAt = 0, staleHits = 0, lastPairWhy = 'first';
+const BUILD = 'staging · 7 Oct 2026 · issue 11 · Simple mode + connection fixes';
+let link = 'idle', linkGen = 0, readyAt = 0, staleHits = 0, lastPairWhy = 'first', lastOpenFail = null;
 let expectLoss = null;          // { why: 'user' | 'reboot' | 'wipe' | 'wipe-reboot', until: ms }
 let retry = null;               // { until: ms, timer, n }
 const listened = new WeakSet();
@@ -3765,6 +3765,7 @@ async function openLink(kind) {
 	} catch (e) {
 		if (gen !== linkGen) return false;
 		const k = errKind(e);
+		lastOpenFail = { kind: k, opened };
 		try { if (dev.gatt.connected) dev.gatt.disconnect(); } catch (_) {}
 		/* The signature of an old pairing this computer remembers and the unit has forgotten
 		   ("the peer has keys this unit does not"): the link OPENS, then dies or is refused
@@ -3873,10 +3874,19 @@ async function connectAfterPairing() {
 		await new Promise(r => setTimeout(r, 1500));
 	}
 }
-function reconnectNow() {
+/* 7 Oct 2026 (bench, Linux, 10 quick Disconnect/Reconnect rounds): one Reconnect pressed 2 s after a
+   disconnect met "Connection attempt failed" before the unit was advertising again, and the page gave
+   up at once with "Stand closer". A Reconnect the installer pressed now keeps trying for 30 s, exactly
+   as a dropped link does, when the link never opened; a pairing problem (link opened, then refused)
+   still stops at once with its card. */
+async function reconnectNow() {
 	if (!dev) { chooseAndConnect(); return; }
-	stopRetryTimer(); retry = null; staleHits = 0;
-	openLink('connect');
+	stopRetryTimer(); retry = null; staleHits = 0; lastOpenFail = null;
+	const ok = await openLink('connect');
+	if (!ok && link === 'lost' && lastOpenFail && !lastOpenFail.opened && lastOpenFail.kind === 'unreachable') {
+		say('the unit did not answer at once — trying again for 30 s');
+		startRetry(1500, 'The unit did not answer at once.');
+	}
 }
 
 /* ── pairing help, per operating system ── */
