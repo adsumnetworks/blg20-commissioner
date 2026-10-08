@@ -329,8 +329,8 @@
 
 <!-- Fix it (8 Oct 2026): one door, from the header, in either mode. Every row below is a
      thin call into a command or a panel this page already has — see the fx-* handlers near
-     setMode(). "Reset the demo sensor list" (LINK_CMD_DEMO_FLEET_CLEAR) is NOT here: no
-     firmware build answers that command yet (a pre-existing gap, not one this pass opened). -->
+     setMode(). "Reset the demo sensor list" sends command 16 with its confirmation byte; it shows
+     only on a demo build, with the resets the unit says it has left (bench-proven 9 Oct: 5 to 0, the 6th refused). -->
 <div class="fx-scrim" id="fx-scrim"></div>
 <div class="fx-sheet" id="fx-sheet" role="dialog" aria-modal="true" aria-label="Fix it" hidden>
 	<h2>Fix it</h2>
@@ -338,6 +338,7 @@
 	<button class="fx-act" id="fx-identify"><b>Flash its lights</b><span>to find the unit among others</span></button>
 	<button class="fx-act" id="fx-cycle"><b>Run a cycle now</b><span>sends now; cancels any wait after a failed attempt</span></button>
 	<button class="fx-act" id="fx-latch"><b>Clear a latched alert</b><span>the alert light goes off; the rule stays</span></button>
+	<button class="fx-act" id="fx-fleetclear" hidden><b>Reset the demo sensor list</b><span id="fx-fleetclear-s">frees its places for the next devices it hears</span></button>
 	<button class="fx-act" id="fx-pair"><b>Pair again</b><span>forget the unit in Bluetooth settings, then Connect. Needed after a wipe</span></button>
 	<button class="fx-act" id="fx-selftest"><b>Self-test</b><span>shows the unit's own store, link and Wi-Fi part result</span></button>
 	<button class="fx-act" id="fx-retire"><b class="d">Take it out of service</b><span>keeps the firmware; wipes position, name, keys, sensors, stored readings, pairings. It can be set up again</span></button>
@@ -1212,7 +1213,10 @@ const CMD = { COMMISSION: 1, TEST_UPLINK: 2, REBOOT: 3, FACTORY_RESET: 4, IDENTI
 	FORCE_RUNG: 6, STATUS_NOW: 7, WINDOW: 8, CLEAR_LATCH: 9, REPUBLISH_TABLE: 10, DECOMMISSION: 13, SELFTEST: 14,
 	/* 5 Oct 2026: the BLE half's own "I am done" - it answers, then drops the link itself. Chrome on
 	   Linux never drops a link to a paired device, and only the unit can end it. status2 v8 and later. */
-	BYE: 17 };
+	BYE: 17,
+	/* 9 Oct 2026: the evaluation fleet's explicit clear. Byte 1 must be 1 (the confirmation); a production
+	   image refuses it, and so does an evaluation unit whose five clears are spent (provision.c). */
+	DEMO_FLEET_CLEAR: 16 };
 
 /* ───────────────────────── small utilities ───────────────────────── */
 const $ = id => document.getElementById(id);
@@ -1745,6 +1749,10 @@ let sta2Timer = null, lastSta2 = null;
 function renderBuildKind(s) {
 	const m = s.m, evaluation = s.buildKind === 1;
 	const kind = $('u-kind'), panel = $('p-limits');
+	$('fx-fleetclear').hidden = !evaluation;
+	if (evaluation) $('fx-fleetclear-s').textContent = s.clearsLeft
+		? 'frees its ' + s.fleetMax + ' places; ' + s.clearsLeft + ' reset' + (s.clearsLeft === 1 ? '' : 's') + ' left on this unit'
+		: 'this unit has used all its resets; the list stays as it is';
 
 	kind.hidden = s.buildKind === 0;
 	if (s.buildKind === 2) {
@@ -4519,7 +4527,8 @@ const PARAMS = [
 	{ id: 'selftest', cap: 'cmd3', name: 'Run the factory self-test', kind: 'action', note: 'command 14 — an UNCOMMISSIONED unit only (a commissioned one refuses). The cellular half proves the state, then both LEDs cycle red, green, blue, amber, white and the unit chirps once; the label (address, passkey, firmware) and the SIM facts appear in the Self-test panel. The same test a power-on with DFU1 held runs' },
 ];
 const CMD_OF = { identify: CMD.IDENTIFY, testup: CMD.TEST_UPLINK, freset: CMD.FACTORY_RESET, reboot: CMD.REBOOT,
-	forcerung: CMD.FORCE_RUNG, statusnow: CMD.STATUS_NOW, window: CMD.WINDOW, clearlatch: CMD.CLEAR_LATCH, republish: CMD.REPUBLISH_TABLE, selftest: CMD.SELFTEST };
+	forcerung: CMD.FORCE_RUNG, statusnow: CMD.STATUS_NOW, window: CMD.WINDOW, clearlatch: CMD.CLEAR_LATCH, republish: CMD.REPUBLISH_TABLE, selftest: CMD.SELFTEST,
+	fleetclear: CMD.DEMO_FLEET_CLEAR };
 // Firmware that has the ui characteristic (12 Sep 2026) answers commands 3, 4 and 5; 2 is still a
 // proposal. 6–10 arrived with the status mirror, so the mirror characteristic is what proves them.
 const cmdLive = id => CMD_OF[id] >= CMD.FORCE_RUNG ? !!caps.sta2 : (!!caps.ui && id !== 'testup');
@@ -4533,11 +4542,13 @@ const CMD_ARGS = {
 	clearlatch: () => { const d = Number(paramValues().latchdev ?? 0) & 0xffff; return [d & 0xff, d >> 8, Number(paramValues().latchrule ?? 0) & 0xff]; },
 	republish: () => [0, 0, 0],
 	selftest: () => [0, 0, 0],
+	fleetclear: () => [1, 0, 0],
 };
 async function sendCommand(id) {
 	const code = CMD_OF[id];
 	if (id === 'freset' && !confirm('Factory reset this unit? It wipes everything the site gave it: position, credential, label, configuration, rules, sensor lists, stored records and every pairing (this one included), then reboots. The byte odometer and the audit line are kept.')) { say('factory reset cancelled'); return; }
 	if (id === 'forcerung' && (paramValues().forcerung ?? 'clear the pin') === 'satellite' && !confirm('Pin this unit to the satellite rung? The satellite allowance is measured in kilobytes a month and a unit left pinned will spend it. Clear the pin before you leave site.')) { say('rung pin cancelled'); return; }
+	if (id === 'fleetclear' && !confirm('Reset the demo sensor list? Its places are freed, and the next devices this unit hears take them. This uses one of the ' + (lastSta2 ? lastSta2.clearsLeft : 'remaining') + ' resets left on this unit.')) { say('sensor list reset cancelled'); return; }
 	const args = CMD_ARGS[id] ? CMD_ARGS[id]() : null;
 	const payload = args ? new Uint8Array([code, args[0], args[1], args[2]]) : new Uint8Array([code]);
 	/* A reboot and a factory reset end the link by design: the page waits for that and does not
@@ -4558,6 +4569,7 @@ async function sendCommand(id) {
 			window: 'commissioning window ' + (paramValues().window ?? 'open'),
 			clearlatch: 'clear-latch sent — watch the Alerts group: a latch that is cleared while the condition has already gone sends its exit now',
 			republish: 'republish sent — the table goes to the cellular half now and to the platform at the next terrestrial window',
+			fleetclear: 'demo sensor list reset: its places are free, and the next devices this unit hears take them',
 			selftest: 'self-test requested — the cellular half proves the unit is uncommissioned, then both LEDs cycle and it chirps once; read the Self-test panel after' }[id] || (id + ' sent'),
 			(id === 'freset' || id === 'forcerung') ? 'warn' : 'good');
 		if (id === 'freset') { written.pos = null; written.label = null; written.ident = null; written.psk = null; forgetPaired(unitAddr()); }
@@ -4571,6 +4583,7 @@ async function sendCommand(id) {
 			return;
 		}
 		expectLoss = null;
+		if (id === 'fleetclear' && k === 'refused' || id === 'fleetclear' && k === 'unknown') { say('the unit kept its demo sensor list: ' + (lastSta2 && lastSta2.buildKind !== 1 ? 'this is not a demo build, so it has no list to reset' : 'its resets are used up') + '.', 'warn'); return; }
 		say(id + ': ' + explainWriteError(e), 'bad');
 	}
 }
@@ -5126,6 +5139,12 @@ $('fx-close').onclick = () => fixitOpen(false);
 function fixitNotLive() { say('not available: this unit\'s firmware does not answer that command yet', 'warn'); }
 $('fx-identify').onclick = () => { fixitOpen(false); if (link === 'ready' && cmdLive('identify')) sendCommand('identify'); else fixitNotLive(); };
 $('fx-cycle').onclick = () => { fixitOpen(false); if (link === 'ready' && cmdLive('statusnow')) sendCommand('statusnow'); else fixitNotLive(); };
+$('fx-fleetclear').onclick = () => {
+	fixitOpen(false);
+	if (link !== 'ready' || !cmdLive('fleetclear')) return fixitNotLive();
+	if (lastSta2 && lastSta2.clearsLeft === 0) return say('this unit has used all its demo list resets: the list stays as it is', 'warn');
+	sendCommand('fleetclear');
+};
 $('fx-latch').onclick = () => { fixitOpen(false); if (link === 'ready' && cmdLive('clearlatch')) sendCommand('clearlatch'); else fixitNotLive(); };
 /* Pair again carries no write: forgetting the unit happens in the OS, outside this page. The
    useful thing this page can do is put the installer back at Connect, in Simple, where the
