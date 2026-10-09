@@ -624,10 +624,17 @@
 <div class="sx off" id="sx5" data-n="5">
 	<h2><span class="n">5</span>Platform<button class="sx-edit" data-edit="5">Change</button></h2>
 	<p>Where the data goes. The <b>device token</b> comes from your platform (ThingsBoard: the device's access token).</p>
-	<p class="hint" style="margin:0 0 6px">ThingsBoard, once per account: the unit sends compact binary data (protobuf), which ThingsBoard reads only with the BLG20 device profile. <a href="thingsboard/blg20-coap-protobuf.device-profile.json" download>Download the profile</a>, import it in <b>Profiles → Device profiles → + → Import</b>, then set it on the device. Without it, ThingsBoard refuses the data.</p>
+	<div id="sx-how" hidden>
+		<label class="sx-f">How the unit talks to your platform</label>
+		<label class="sx-choice" data-how="coap"><input type="radio" name="sx-how" value="coap" checked><span><b>CoAP</b><small>The default. ThingsBoard with the BLG20 device profile; the smallest bytes.</small></span></label>
+		<label class="sx-choice" data-how="mqtt"><input type="radio" name="sx-how" value="mqtt"><span><b>MQTT over TLS</b><small>ThingsBoard, or any broker with a public certificate (port 8883). Data as JSON.</small></span></label>
+		<label class="sx-choice" data-how="mqtt-plain"><input type="radio" name="sx-how" value="mqtt-plain"><span><b>MQTT without TLS</b><small>A local broker on your network (port 1883). Nothing is encrypted: for a demo, never for a site.</small></span></label>
+		<p class="hint" id="sx-how-note" style="margin:4px 0 8px">MQTT goes over the mobile network; Wi-Fi carries CoAP only in this release.</p>
+	</div>
+	<p class="hint" id="sx-coap-hint" style="margin:0 0 6px">ThingsBoard, once per account: the unit sends compact binary data (protobuf), which ThingsBoard reads only with the BLG20 device profile. <a href="thingsboard/blg20-coap-protobuf.device-profile.json" download>Download the profile</a>, import it in <b>Profiles → Device profiles → + → Import</b>, then set it on the device. Without it, ThingsBoard refuses the data.</p>
 	<label class="sx-f" for="sx-srv">Server address <span class="sx-req ok">from the unit</span></label>
 	<div class="row"><input type="text" id="sx-srv" class="mono" maxlength="47" style="flex:3 1 200px" autocomplete="off" spellcheck="false"><input type="number" id="sx-port" min="1" max="65535" style="flex:1 1 90px" aria-label="Port"></div>
-	<label class="sx-f" for="sx-tok">Device token <span class="sx-req" id="sx-r-tok">required</span></label>
+	<label class="sx-f" for="sx-tok"><span id="sx-tok-what">Device token</span> <span class="sx-req" id="sx-r-tok">required</span></label>
 	<input type="password" id="sx-tok" class="mono" maxlength="23" placeholder="paste the token from the platform" autocomplete="off" spellcheck="false">
 	<label class="sx-keep"><input type="checkbox" id="sx-tokkeep"> This unit already has its token: keep it</label>
 	<span class="hint">8 to 23 letters and digits. Written once and never shown again, not even to this page.</span>
@@ -641,7 +648,7 @@
 				<div class="bd">
 					<div class="row">
 						<div class="field"><label for="d-class">Class</label><select id="d-class"><option value="0">TN — terrestrial only</option><option value="1">NTN — satellite only</option><option value="2">TN+NTN — the ladder</option></select></div>
-						<div class="field"><label for="d-transport">Transport</label><select id="d-transport"><option value="0">CoAP / DTLS-CID</option><option value="1">MQTT / TLS</option></select></div>
+						<div class="field"><label for="d-transport">Transport</label><select id="d-transport"><option value="0">CoAP / DTLS-CID</option><option value="1">MQTT / TLS</option><option value="2">MQTT, no TLS (local broker, demo only)</option></select></div>
 						<div class="field"><label for="d-encoding">Encoding</label><select id="d-encoding"><option value="0">JSON</option><option value="1">CBOR</option><option value="2">protobuf</option></select></div>
 					</div>
 					<div class="row" style="margin-top:10px">
@@ -1205,6 +1212,7 @@ const REFUSAL = {                              // mirrors enum prov_error in pro
 	2: 'no credential — write one first',
 	3: 'the unit did not recognise the length of that write',
 	4: 'the position was rejected: it needs a method and a real uncertainty',
+	5: 'this unit has no Wi-Fi part, so it keeps no Wi-Fi network',
 };
 /* enum link_cmd_id in each chip's src/link_proto.h — ONE table, shared by both chips and this tool.
    1–5 are written as a single byte, as they always were; 6–10 carry three argument bytes after
@@ -2222,9 +2230,12 @@ function dplAdvice() {
 	const sat = d.cls === 1 || d.cls === 2;
 	const out = [];
 
-	if (d.transport === 1) {
+	if (d.transport >= 1) {
 		out.push('<b>On the tenant:</b> this device needs ' + TENANT_PROFILE[0] +
-			 '. Nothing on the unit or the platform warns when the two disagree.');
+			 '. Nothing on the unit or the platform warns when the two disagree.' +
+			 (d.encoding !== 0 ? ' With ' + (d.encoding === 2 ? 'protobuf' : 'CBOR') + ' over MQTT the profile must also name that payload; the page writes JSON for MQTT, which the default profile and any broker read.' : ''));
+		out.push('<b>Wi-Fi:</b> MQTT needs a stream and the Wi-Fi relay carries datagrams, so an MQTT unit sends over the mobile network even where Wi-Fi is fitted.');
+		if (d.transport === 2) out.push('<b>No TLS:</b> the broker sees the token in clear and anyone on the path sees the data. A local broker for a demo, never a site.');
 	} else {
 		/* [17 Sep 2026] This used to be keyed on the CLASS, so a TN unit with CoAP selected was
 		   told it needed "a DEFAULT profile, transport MQTT" while CoAP sat in the box above. The
@@ -2241,7 +2252,7 @@ function dplAdvice() {
 			 'protobuf carries a status and <b>two</b> alerts, CBOR a status and <b>one</b>. ' +
 			 'The unit will accept CBOR and send half the alarms.');
 	}
-	if (sat && d.transport === 1) {
+	if (sat && d.transport >= 1) {
 		out.push('<b>The unit will refuse this.</b> MQTT is a terrestrial-only privilege ' +
 			 '(SPEC 07 D1) and the BLE half checks it before a byte reaches the modem.');
 	}
@@ -3819,7 +3830,7 @@ $('b-ruleadd').onclick = e => {
    ready        connected and paired: the only state in which the panels are live
    reconnecting the link dropped unexpectedly; trying again on its own for 30 s
    lost         not connected; the panels show what the unit said last, dimmed */
-const BUILD = 'staging · 9 Oct 2026 · demo-1 · step by step, Wi-Fi network, Fix it';
+const BUILD = 'staging · 9 Oct 2026 · demo-1.1 · the transport choice (CoAP, MQTT), Fix it, Wi-Fi network';
 let link = 'idle', linkGen = 0, readyAt = 0, staleHits = 0, lastPairWhy = 'first', lastOpenFail = null;
 let expectLoss = null;          // { why: 'user' | 'reboot' | 'wipe' | 'wipe-reboot', until: ms }
 let retry = null;               // { until: ms, timer, n }
@@ -4788,7 +4799,7 @@ function sxAdvNote(n, d) {
 	if (n.plmnMode !== 0 || n.lock) o.push('an operator preference or lock');
 	if (n.bands.some(r => r.some(b => b))) o.push('band locks');
 	if (n.climb) o.push('a climb-back time');
-	if (d.transport !== 0 || d.encoding !== 2) o.push('transport ' + (d.transport ? 'MQTT' : 'CoAP') + ' with ' + ['JSON', 'CBOR', 'protobuf'][d.encoding]);
+	if (d.transport !== 0 || d.encoding !== 2) o.push('transport ' + ['CoAP', 'MQTT over TLS', 'MQTT without TLS'][d.transport] + ' with ' + ['JSON', 'CBOR', 'protobuf'][d.encoding]);
 	if (lastSta2 && lastSta2.accRules) o.push(lastSta2.accRules + ' access rule(s)');
 	$('sx-adv-note').innerHTML = o.length ? '<p class="note warn"><b>Set in Advanced on this unit:</b> ' + o.join(', ') + '. Simple keeps them.</p>' : '';
 	if (o.length) sxNote(4, 'warn', 'This unit has ' + o.join(', ') + ' set in Advanced. Simple keeps them.');
@@ -4876,6 +4887,8 @@ function sxPaintNet() {
 	sxReq('sx-r-net', !!sx.net && mobOk);
 	$('sx-b4').disabled = !(sx.net && mobOk);
 	if (lastSta2 && lastSta2.capsFlags !== null) $('sx-wifi-state').textContent = 'Wi-Fi: ' + wifiNetWords(lastSta2.capsFlags);
+	/* The platform step's transport choice follows the class: shown on a terrestrial class only. */
+	if (typeof sxPaintHow === 'function') sxPaintHow();
 }
 document.querySelectorAll('input[name=sx-net]').forEach(r => { r.onchange = () => { sx.net = r.value; sxPaintNet(); }; });
 ['sx-ltem', 'sx-nb', 'sx-roam'].forEach(i => { $(i).onchange = sxPaintNet; });
@@ -4935,9 +4948,31 @@ $('sx-b4wf').onclick = async () => {
 };
 
 /* ── 5. platform ── */
+/* The transport, as the page will write it: CoAP unless the network class is terrestrial and the
+   installer chose MQTT. On a class with satellite the choice is not shown and CoAP is written, which
+   is also what the unit would refuse anything else for (cfg_reason 1). */
+const SX_HOW = { coap: { transport: 0, encoding: 2, port: 5683 }, mqtt: { transport: 1, encoding: 0, port: 8883 }, 'mqtt-plain': { transport: 2, encoding: 0, port: 1883 } };
+function sxHow() {
+	if (sx.net !== 'tn') return 'coap';
+	const r = document.querySelector('input[name=sx-how]:checked');
+	return r && SX_HOW[r.value] ? r.value : 'coap';
+}
+function sxPaintHow() {
+	const how = sxHow(), mqtt = how !== 'coap';
+	$('sx-how').hidden = sx.net !== 'tn';
+	$('sx-coap-hint').hidden = mqtt;
+	$('sx-tok-what').textContent = mqtt ? 'Device token (the MQTT user name)' : 'Device token';
+	$('sx-tok').placeholder = mqtt ? 'ThingsBoard: the access token; another broker: its user name, or leave empty' : 'paste the token from the platform';
+	$('sx-r-tok').hidden = false;
+	/* The port follows the choice until the installer types one of their own. */
+	if (!$('sx-port').dataset.typed) $('sx-port').value = String(SX_HOW[how].port);
+	sxCheck5();
+}
 function sxCheck5() {
+	const how = sxHow(), mqtt = how !== 'coap';
 	const t = $('sx-tok').value.trim(), keep = $('sx-tokkeep').checked;
-	const tOk = keep || /^[A-Za-z0-9]{8,23}$/.test(t);
+	/* An MQTT user name may be anything short, or empty for an anonymous broker. */
+	const tOk = keep || (mqtt ? t.length <= 23 : /^[A-Za-z0-9]{8,23}$/.test(t));
 	const sOk = $('sx-srv').value.trim().length >= 4 && $('sx-srv').value.trim().length <= 47;
 	const pOk = Number($('sx-port').value) >= 1 && Number($('sx-port').value) <= 65535;
 	$('sx-tok').disabled = keep;
@@ -4946,12 +4981,16 @@ function sxCheck5() {
 	$('sx-b5').disabled = !(tOk && sOk && pOk);
 }
 ['sx-tok', 'sx-srv', 'sx-port'].forEach(i => $(i).addEventListener('input', sxCheck5));
+$('sx-port').addEventListener('input', () => { $('sx-port').dataset.typed = '1'; });
 $('sx-tokkeep').onchange = sxCheck5;
+document.querySelectorAll('input[name=sx-how]').forEach(r => { r.onchange = sxPaintHow; });
 $('sx-b5').onclick = async () => {
 	$('sx-b5').disabled = true;
 	const d0 = await readDpl(true);
 	if (!d0) { sxNote(5, 'stop', 'Could not read the unit\'s platform settings. Check the link and try again.'); sxCheck5(); return; }
 	dplToForm(d0);
+	const how = sxHow();
+	$('d-transport').value = String(SX_HOW[how].transport); $('d-encoding').value = String(SX_HOW[how].encoding);
 	$('d-endpoint').value = $('sx-srv').value.trim(); $('d-port').value = String(Number($('sx-port').value));
 	$('d-token').value = $('sx-tokkeep').checked ? '' : $('sx-tok').value.trim();   // empty = keep the unit's
 	const ok = await writeBlock('dpl');
@@ -4959,7 +4998,8 @@ $('sx-b5').onclick = async () => {
 	sxCheck5();
 	if (ok) {
 		sx.tokenSet = !$('sx-tokkeep').checked;
-		sxNote(5, 'go', 'Saved on the unit ✓ <code>' + $('sx-srv').value.trim() + ':' + $('sx-port').value + '</code> · ' + (sx.tokenSet ? 'token set (never shown again)' : 'token kept'));
+		const howWords = { coap: 'CoAP', mqtt: 'MQTT over TLS, JSON', 'mqtt-plain': 'MQTT without TLS, JSON' }[how];
+		sxNote(5, 'go', 'Saved on the unit ✓ <code>' + $('sx-srv').value.trim() + ':' + $('sx-port').value + '</code> · ' + howWords + ' · ' + (sx.tokenSet ? 'token set (never shown again)' : 'token kept'));
 		sxDone(5);
 	} else sxNote(5, 'stop', '<b>Not saved.</b> ' + sxRefusal('n-dplnote'));
 };
