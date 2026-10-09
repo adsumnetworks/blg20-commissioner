@@ -3837,7 +3837,7 @@ $('b-ruleadd').onclick = e => {
    ready        connected and paired: the only state in which the panels are live
    reconnecting the link dropped unexpectedly; trying again on its own for 30 s
    lost         not connected; the panels show what the unit said last, dimmed */
-const BUILD = 'staging · 9 Oct 2026 · demo-1.1 · MQTT on the mobile network, a token stays with its address, the held transport, Fix it, Wi-Fi network';
+const BUILD = 'staging · 9 Oct 2026 · demo-1.2 · one journey in seven steps, MQTT on the mobile network, a token stays with its address, Fix it, Wi-Fi network';
 let link = 'idle', linkGen = 0, readyAt = 0, staleHits = 0, lastPairWhy = 'first', lastOpenFail = null;
 let expectLoss = null;          // { why: 'user' | 'reboot' | 'wipe' | 'wipe-reboot', until: ms }
 let retry = null;               // { until: ms, timer, n }
