@@ -2403,6 +2403,11 @@ async function writeBlock(kind) {
 		return false;
 	}
 	const skip = isNet ? null : [DPL_OFF.TOKEN, TOKEN_MAX];
+	/* A platform write with a NEW address and a blank token leaves the unit with no token for it
+	   (config.c, 9 Oct: a token is never carried to a server that did not issue it). Said here, so
+	   the Advanced path hears it as the Simple path does. */
+	const moved = !isNet && lastDpl && !$('d-token').value &&
+		String(lastDpl.endpoint || '').toLowerCase() !== $('d-endpoint').value.trim().toLowerCase();
 	if (!sameBytes(buf, back, skip)) {
 		say(name + ' read back DIFFERENT from what was written', 'bad');
 		note.innerHTML += '<div class="bytes">read back <b>' + dvHex(back) + '</b></div><p class="note stop"><b>Read-back differs.</b> The unit holds something else.</p>';
@@ -2411,7 +2416,8 @@ async function writeBlock(kind) {
 	if (isNet) { lastNet = parseNet(back); netToForm(lastNet); } else { lastDpl = parseDpl(back); dplToForm(lastDpl); }
 	say(name + ' written, read back: matches' + (skip ? ' (the device token is not compared: the unit never echoes it)' : ''), 'good');
 	note.innerHTML += '<p class="note go"><b>Written and read back.</b>' +
-		(skip ? ' The device token is <b>not compared</b> — the unit deliberately never sends a credential back, so there is nothing to compare it against. Keep it in the fleet register.' : '') +
+		(skip ? ' The device token is <b>not compared</b>: the unit deliberately never sends a credential back, so there is nothing to compare it against. Keep it in the fleet register.' : '') +
+		(moved ? ' <b>The unit now holds no token</b> for this new address: a token is never carried to a server that did not issue it. Write one before commissioning, unless the broker takes clients without one.' : '') +
 		' It is on test for three boots: if the unit fails its health gate under it, the previous one comes back and the status panel says so.</p>';
 	if (chars.sta2) setTimeout(readStatus2, 300);
 	return true;
