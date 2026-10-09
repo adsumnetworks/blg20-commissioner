@@ -637,6 +637,7 @@
 	<label class="sx-f" for="sx-tok"><span id="sx-tok-what">Device token</span> <span class="sx-req" id="sx-r-tok">required</span></label>
 	<input type="password" id="sx-tok" class="mono" maxlength="23" placeholder="paste the token from the platform" autocomplete="off" spellcheck="false">
 	<label class="sx-keep"><input type="checkbox" id="sx-tokkeep"> This unit already has its token: keep it</label>
+	<span class="hint" id="sx-tokkeep-why" hidden>A new server address needs its own token: the unit never sends the token it holds to a different server.</span>
 	<span class="hint">8 to 23 letters and digits. Written once and never shown again, not even to this page.</span>
 	<div style="margin-top:10px"><button class="btn sx-big" id="sx-b5" disabled>Save the platform</button></div>
 	<div id="sx-o5"></div>
@@ -657,9 +658,9 @@
 					</div>
 					<div class="row" style="margin-top:10px">
 						<div class="field"><label for="d-apn">APN</label><input type="text" id="d-apn" class="mono" maxlength="31" autocomplete="off" spellcheck="false"><span class="hint">blank = the SIM's own default, which is what most cards want; a managed IoT APN may not resolve DNS</span></div>
-						<div class="field"><label for="d-token">Device token</label><input type="password" id="d-token" class="mono" maxlength="23" autocomplete="off" spellcheck="false"><span class="hint">8–23 letters and digits. <b>Blank keeps the token the unit holds</b> — a token is replaced by a new one or removed by a factory reset, never cleared by omission.</span></div>
+						<div class="field"><label for="d-token">Device token</label><input type="password" id="d-token" class="mono" maxlength="23" autocomplete="off" spellcheck="false"><span class="hint">8–23 letters and digits. <b>Blank keeps the token the unit holds, for the same server address.</b> A new address starts without one: the unit never sends a token to a server that did not issue it. Otherwise a token is replaced by a new one or removed by a factory reset.</span></div>
 					</div>
-					<p class="note warn" style="margin-top:8px"><b>The unit never reads a token back.</b> It is this unit's data-plane credential, so the read returns that field zeroed and the read-back check skips it. Leave the box blank on any later edit and the unit keeps the token it holds.</p>
+					<p class="note warn" style="margin-top:8px"><b>The unit never reads a token back.</b> It is this unit's data-plane credential, so the read returns that field zeroed and the read-back check skips it. Leave the box blank on any later edit and the unit keeps the token it holds, as long as the server address stays the same.</p>
 					<div class="row" style="margin-top:12px"><button class="btn" id="b-dplwrite">Write and read back</button><button class="btn quiet" id="b-dplread">Read from the unit</button></div>
 					<div id="n-dpladvice"></div>
 					<div id="n-dplnote"></div>
@@ -3830,7 +3831,7 @@ $('b-ruleadd').onclick = e => {
    ready        connected and paired: the only state in which the panels are live
    reconnecting the link dropped unexpectedly; trying again on its own for 30 s
    lost         not connected; the panels show what the unit said last, dimmed */
-const BUILD = 'staging · 9 Oct 2026 · demo-1.1 · the transport choice (CoAP, MQTT), Fix it, Wi-Fi network';
+const BUILD = 'staging · 9 Oct 2026 · demo-1.1 · MQTT on the mobile network, a token stays with its address, the held transport, Fix it, Wi-Fi network';
 let link = 'idle', linkGen = 0, readyAt = 0, staleHits = 0, lastPairWhy = 'first', lastOpenFail = null;
 let expectLoss = null;          // { why: 'user' | 'reboot' | 'wipe' | 'wipe-reboot', until: ms }
 let retry = null;               // { until: ms, timer, n }
@@ -4746,7 +4747,8 @@ function sxStage(n) {
 function sxDone(n) { sx.done.add(n); let k = n + 1; while (k < 7 && sx.done.has(k)) k++; sxStage(Math.min(k, 7)); }
 document.querySelectorAll('[data-edit]').forEach(b => { b.onclick = e => { e.preventDefault(); sxStage(Number(b.dataset.edit)); }; });
 function sxReset() {
-	sx.at = 1; sx.done.clear(); sx.net = null; sx.quar = []; sx.tokenSet = false; sx.sensors = 0;
+	sx.at = 1; sx.done.clear(); sx.net = null; sx.quar = []; sx.tokenSet = false; sx.tokNone = false; sx.sensors = 0; sx.srv0 = '';
+	delete $('sx-port').dataset.typed;
 	for (let i = 1; i <= 7; i++) sxNote(i, '', '');
 	document.querySelectorAll('input[name=sx-net]').forEach(r => { r.checked = false; });
 	['sx-name', 'sx-id', 'sx-key', 'sx-tok', 'sx-ll', 'sx-apn', 'sx-wifi-ssid', 'sx-wifi-psk'].forEach(id => { $(id).value = ''; delete $(id).dataset.auto; });
@@ -4780,6 +4782,13 @@ async function sxOnReady() {
 			}
 			$('sx-roam').checked = !!n.roaming; $('sx-apn').value = d.apn || '';
 			$('sx-srv').value = d.endpoint; $('sx-port').value = String(d.port);
+			/* Start from the transport the unit holds (9 Oct): a page that showed CoAP for a unit on
+			   MQTT would switch it back to CoAP on the next save of a new token. The port counts as
+			   typed when it is not the default for that transport, so it is never overwritten. */
+			sx.srv0 = d.endpoint;
+			const held = d.transport === 1 ? 'mqtt' : d.transport === 2 ? 'mqtt-plain' : 'coap';
+			const hr = document.querySelector('input[name=sx-how][value=\'' + held + '\']'); if (hr) hr.checked = true;
+			if (d.port !== SX_HOW[held].port) $('sx-port').dataset.typed = '1'; else delete $('sx-port').dataset.typed;
 			sxAdvNote(n, d);
 		}
 	} else {
@@ -4962,7 +4971,7 @@ function sxPaintHow() {
 	$('sx-how').hidden = sx.net !== 'tn';
 	$('sx-coap-hint').hidden = mqtt;
 	$('sx-tok-what').textContent = mqtt ? 'Device token (the MQTT user name)' : 'Device token';
-	$('sx-tok').placeholder = mqtt ? 'ThingsBoard: the access token; another broker: its user name, or leave empty' : 'paste the token from the platform';
+	$('sx-tok').placeholder = mqtt ? 'ThingsBoard: the access token; an open broker: leave it empty' : 'paste the token from the platform';
 	$('sx-r-tok').hidden = false;
 	/* The port follows the choice until the installer types one of their own. */
 	if (!$('sx-port').dataset.typed) $('sx-port').value = String(SX_HOW[how].port);
@@ -4970,9 +4979,17 @@ function sxPaintHow() {
 }
 function sxCheck5() {
 	const how = sxHow(), mqtt = how !== 'coap';
+	/* The unit keeps a token only for the address it was given for (config.c, 9 Oct), so the
+	   keep box means nothing once the address changes. */
+	const srv = $('sx-srv').value.trim();
+	const moved = !!sx.srv0 && srv.toLowerCase() !== String(sx.srv0).toLowerCase();
+	if (moved) $('sx-tokkeep').checked = false;
+	$('sx-tokkeep').disabled = moved;
+	$('sx-tokkeep-why').hidden = !moved;
 	const t = $('sx-tok').value.trim(), keep = $('sx-tokkeep').checked;
-	/* An MQTT user name may be anything short, or empty for an anonymous broker. */
-	const tOk = keep || (mqtt ? t.length <= 23 : /^[A-Za-z0-9]{8,23}$/.test(t));
+	/* The unit's own rule (token_ok): 8 to 23 letters and digits. MQTT may also go without one,
+	   for an open broker; a broker that needs a user name and a password is not supported. */
+	const tOk = keep || /^[A-Za-z0-9]{8,23}$/.test(t) || (mqtt && t === '');
 	const sOk = $('sx-srv').value.trim().length >= 4 && $('sx-srv').value.trim().length <= 47;
 	const pOk = Number($('sx-port').value) >= 1 && Number($('sx-port').value) <= 65535;
 	$('sx-tok').disabled = keep;
@@ -4992,14 +5009,18 @@ $('sx-b5').onclick = async () => {
 	const how = sxHow();
 	$('d-transport').value = String(SX_HOW[how].transport); $('d-encoding').value = String(SX_HOW[how].encoding);
 	$('d-endpoint').value = $('sx-srv').value.trim(); $('d-port').value = String(Number($('sx-port').value));
-	$('d-token').value = $('sx-tokkeep').checked ? '' : $('sx-tok').value.trim();   // empty = keep the unit's
+	$('d-token').value = $('sx-tokkeep').checked ? '' : $('sx-tok').value.trim();   // empty = keep the unit's (same address only)
+	const typed = $('d-token').value !== '';
 	const ok = await writeBlock('dpl');
 	$('d-token').value = ''; $('sx-tok').value = '';
 	sxCheck5();
 	if (ok) {
-		sx.tokenSet = !$('sx-tokkeep').checked;
+		const srvNow = $('sx-srv').value.trim(), moved = !!sx.srv0 && srvNow.toLowerCase() !== String(sx.srv0).toLowerCase();
+		sx.tokenSet = typed; sx.tokNone = !typed && moved;
+		sx.srv0 = srvNow; sxCheck5();
 		const howWords = { coap: 'CoAP', mqtt: 'MQTT over TLS, JSON', 'mqtt-plain': 'MQTT without TLS, JSON' }[how];
-		sxNote(5, 'go', 'Saved on the unit ✓ <code>' + $('sx-srv').value.trim() + ':' + $('sx-port').value + '</code> · ' + howWords + ' · ' + (sx.tokenSet ? 'token set (never shown again)' : 'token kept'));
+		const tokWords = typed ? 'token set (never shown again)' : moved ? 'no token: a new address starts without one' : 'token kept';
+		sxNote(5, 'go', 'Saved on the unit ✓ <code>' + srvNow + ':' + $('sx-port').value + '</code> · ' + howWords + ' · ' + tokWords);
 		sxDone(5);
 	} else sxNote(5, 'stop', '<b>Not saved.</b> ' + sxRefusal('n-dplnote'));
 };
@@ -5050,7 +5071,7 @@ function sxSummary() {
 		['Name', written.label || (s && s.hasCred ? 'held (written earlier)' : '')],
 		['Key', written.psk ? 'new, in this device\'s register' : (s && s.hasCred ? 'held (written earlier)' : '')],
 		['Network', n && d && sx.done.has(4) ? sxNetWords(d.cls, n.allow, n.roaming, d.apn) : ''],
-		['Platform', d && sx.done.has(5) ? d.endpoint + ':' + d.port + (sx.tokenSet ? ' · token set' : ' · token kept') : ''],
+		['Platform', d && sx.done.has(5) ? d.endpoint + ':' + d.port + ' · ' + (['CoAP', 'MQTT over TLS', 'MQTT without TLS'][d.transport] || 'transport ' + d.transport) + (sx.tokenSet ? ' · token set' : sx.tokNone ? ' · no token' : ' · token kept') : ''],
 		['Sensors', sx.done.has(6) ? ((lastSta2 && lastSta2.accExpN) || sx.sensors ? ((lastSta2 && lastSta2.accExpN) || sx.sensors) + ' on the list' : 'none yet') : ''],
 	];
 	$('sx-sum').innerHTML = rows.map(([k, v]) => '<li><b>' + k + '</b>' + (v ? v : '<span class="bad">missing</span>') + '</li>').join('');
