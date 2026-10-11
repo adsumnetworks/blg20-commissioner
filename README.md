@@ -1,7 +1,7 @@
 # NTN-GW Commissioner
 
 Commission an Adsum NTN gateway (BLG20x, LBG20x) from Chrome over Web Bluetooth — no cable, no app.
-Open **https://commission.adsumnetworks.com/blg20/** in Chrome on Android (or a laptop), stand next to the unit, and follow the five steps.
+Open **https://commission.adsumnetworks.com/ntn-gw/** in Chrome on Android (or a laptop), stand next to the unit, and follow the five steps.
 
 Built with Adsum IoT Coder · powered by Adsum Networks. Single page, no dependencies, nothing leaves the phone and the gateway except what you export.
 
